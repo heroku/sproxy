@@ -13,6 +13,8 @@ import (
 
 	"github.com/tomsteele/dmv"
 
+	"net/http/httputil"
+
 	"github.com/boltdb/bolt"
 	"github.com/yosssi/boltstore/reaper"
 	bstore "github.com/yosssi/boltstore/store"
@@ -31,6 +33,8 @@ func authorize(s sessions.Session, rw http.ResponseWriter, req *http.Request) {
 		http.Redirect(rw, req, "/auth/google", http.StatusFound)
 		return
 	}
+	parts := strings.SplitN(email.(string), "@", 2)
+	req.Header.Set("X-Openid-User", parts[0])
 }
 
 func enforceXForwardedProto(rw http.ResponseWriter, req *http.Request) {
@@ -72,7 +76,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	proxy := NewSingleHostReverseProxy(pUrl)
+	proxy := httputil.NewSingleHostReverseProxy(pUrl)
 
 	store, err := bstore.New(db, bstore.Config{}, []byte(sessionSecret))
 	if err != nil {
