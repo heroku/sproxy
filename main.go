@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/sessions"
@@ -74,7 +73,6 @@ func main() {
 	}
 
 	proxy := NewSingleHostReverseProxy(pUrl)
-	proxy.FlushInterval = time.Millisecond * 100
 
 	store, err := bstore.New(db, bstore.Config{}, []byte(sessionSecret))
 	if err != nil {
