@@ -16,6 +16,7 @@ import (
 	"net/http/httputil"
 
 	"github.com/boltdb/bolt"
+	gsessions "github.com/gorilla/sessions"
 	"github.com/yosssi/boltstore/reaper"
 	bstore "github.com/yosssi/boltstore/store"
 )
@@ -79,8 +80,7 @@ func main() {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(pUrl)
-
-	store, err := bstore.New(db, bstore.Config{}, []byte(sessionSecret))
+	store, err := bstore.New(db, bstore.Config{SessionOptions: gsessions.Options{Secure: true}}, []byte(sessionSecret))
 	if err != nil {
 		log.Fatal(err)
 	}
