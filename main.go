@@ -24,7 +24,7 @@ import (
 type Config struct {
 	ClientId      string `env:"CLIENT_ID,required"`      // Google Client ID
 	ClientSecret  string `env:"CLIENT_SECRET,required"`  // Google Client Secret
-	SessionSecret []byte `env:"SESSION_SECRET,required"` // Random session encruption token
+	SessionSecret string `env:"SESSION_SECRET,required"` // Random session encruption token
 	DNSName       string `env:"DNS_NAME,required"`       // Public facing DNS Hostname
 
 	SessionDBPath string `env:"SESSION_DB_PATH,default=./sessions.db"` // Path to session database, including db name
@@ -132,7 +132,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	store, err := bstore.New(sessionDB, boltStoreOptions, cfg.SessionSecret)
+	store, err := bstore.New(sessionDB, boltStoreOptions, []byte(cfg.SessionSecret))
 	if err != nil {
 		log.Fatal(err)
 	}
