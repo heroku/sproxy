@@ -27,9 +27,11 @@ type Config struct {
 	SessionSecret []byte `env:"SESSION_SECRET,required"` // Random session encruption token
 	DNSName       string `env:"DNS_NAME,required"`       // Public facing DNS Hostname
 
-	SessionDBPath string `env:"SESSION_DB_PATH,default=./sessions.db"`    // Path to session database, including db name
-	ProxyURL      string `env:"PROXY_URL,default=http://localhost:8000/"` // URL to Proxy to
-	CookieName    string `env:"COOKIE_NAME,default=sproxy_session"`       // The name of the cookie
+	SessionDBPath string `env:"SESSION_DB_PATH,default=./sessions.db"` // Path to session database, including db name
+	CookieMaxAge  int    `env:"COOKIE_MAX_AGE,default=1440"`           // Cookie MaxAge, Defaults to 1 day
+	CookieName    string `env:"COOKIE_NAME,default=sproxy_session"`    // The name of the cookie
+
+	ProxyURL string `env:"PROXY_URL,default=http://localhost:8000/"` // URL to Proxy to
 
 	CallBackPath string `env:"CALLBACK_PATH,default=/auth/callback/google"` // Callback URL
 	AuthPath     string `env:"AUTH_PATH,default=/auth/google"`              // Auth Path
@@ -105,6 +107,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	sessionOptions.MaxAge = cfg.CookieMaxAge
 
 	googleOpts := &dmv.OAuth2Options{
 		ClientID:     cfg.ClientId,
