@@ -1,11 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/go-martini/martini"
@@ -19,27 +17,74 @@ import (
 	gsessions "github.com/gorilla/sessions"
 	"github.com/yosssi/boltstore/reaper"
 	bstore "github.com/yosssi/boltstore/store"
+
+	"github.com/joeshaw/envdecode"
 )
+
+type Config struct {
+	ClientId      string `env:"CLIENT_ID,required"`
+	ClientSecret  string `env:"CLIENT_SECRET,required"`
+	SessionSecret []byte `env:"SESSION_SECRET,required"`
+	DNSName       string `env:"DNS_NAME,required"`
+
+	SessionDBPath string `env:"SESSION_DB_PATH,default=./sessions.db"`
+	ProxyURL      string `env:"PROXY_URL,default=http://localhost:8000/"`
+	CookieName    string `env:"COOKIE_NAME,default=sproxy_session"`
+
+	CallBackPath string `env:"CALLBACK_PATH,default=/auth/callback/google"`
+	AuthPath     string `env:"AUTH_PATH,default=/auth/google"`
+
+	HealthCheckPath string `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/status.html"`
+
+	EmailSuffix string `env:"EMAIL_SUFFIX,default=@heroku.com"`
+}
 
 var (
-	clientId      = os.Getenv("CLIENT_ID")
-	clientSecret  = os.Getenv("CLIENT_SECRET")
-	sessionSecret = os.Getenv("SESSION_SECRET")
+	cfg              = Config{}
+	oAuthScopes      = []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"}
+	sessionOptions   = gsessions.Options{Secure: true, HttpOnly: true}
+	boltStoreOptions = bstore.Config{SessionOptions: sessionOptions}
 )
 
+// Authorize the user based on email and a set OpenIDUser
 func authorize(s sessions.Session, rw http.ResponseWriter, req *http.Request) {
 	email := s.Get("email")
-	if email == nil || !strings.HasSuffix(email.(string), "@heroku.com") {
-		http.Redirect(rw, req, "/auth/google", http.StatusFound)
+	if email == nil || !strings.HasSuffix(email.(string), cfg.EmailSuffix) {
+		http.Redirect(rw, req, cfg.AuthPath, http.StatusFound)
 		return
 	}
 
 	openIDUser := s.Get("OpenIDUser")
 	if openIDUser != nil && openIDUser != "" {
 		req.Header.Set("X-Openid-User", openIDUser.(string))
+	} else {
+		// No openIDUser set, so abort and restart the auth flow
+		http.Redirect(rw, req, cfg.AuthPath, http.StatusFound)
 	}
 }
 
+// Set the OpenIDUser and other session values based on the data from Google
+func handleCallback(goog *dmv.Google, s sessions.Session, rw http.ResponseWriter, req *http.Request) {
+	// Handle any errors.
+	if len(goog.Errors) > 0 {
+		http.Error(rw, "Oauth failure", http.StatusInternalServerError)
+		return
+	}
+
+	s.Set("GoogleID", goog.Profile.ID)
+	s.Set("email", goog.Profile.Email)
+
+	parts := strings.SplitN(goog.Profile.Email, "@", 2)
+	if len(parts) < 2 {
+		http.Error(rw, "Unable to determine OpenIDUser from email `"+goog.Profile.Email+"`", http.StatusInternalServerError)
+		return
+	}
+	s.Set("OpenIDUser", parts[0])
+
+	http.Redirect(rw, req, "/", http.StatusFound)
+}
+
+// Ensure that we're being proxied to ourselves via https
 func enforceXForwardedProto(rw http.ResponseWriter, req *http.Request) {
 	xff := req.Header.Get("X-Forwarded-Proto")
 	if xff != "https" {
@@ -56,61 +101,51 @@ func enforceXForwardedProto(rw http.ResponseWriter, req *http.Request) {
 
 func main() {
 
-	googleOpts := &dmv.OAuth2Options{
-		ClientID:     clientId,
-		ClientSecret: clientSecret,
-		RedirectURL:  "https://splunk-searcher.ssl.edward.herokudev.com/auth/callback/google",
-		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
-	}
-
-	db, err := bolt.Open("./sessions.db", 0666, nil)
+	err := envdecode.Decode(&cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	defer db.Close()
-	defer reaper.Quit(reaper.Run(db, reaper.Options{}))
+	googleOpts := &dmv.OAuth2Options{
+		ClientID:     cfg.ClientId,
+		ClientSecret: cfg.ClientSecret,
+		RedirectURL:  "https://" + cfg.DNSName + cfg.CallBackPath,
+		Scopes:       oAuthScopes,
+	}
+
+	sessionDB, err := bolt.Open(cfg.SessionDBPath, 0666, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer sessionDB.Close()
+	defer reaper.Quit(reaper.Run(sessionDB, reaper.Options{}))
 
 	m := martini.Classic()
 
-	pUrl, err := url.Parse("http://localhost:8000/")
+	pUrl, err := url.Parse(cfg.ProxyURL)
 
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	store, err := bstore.New(sessionDB, boltStoreOptions, cfg.SessionSecret)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Inject a session when it's needed
+	m.Use(sessions.Sessions(cfg.CookieName, store))
 
 	proxy := httputil.NewSingleHostReverseProxy(pUrl)
-	store, err := bstore.New(db, bstore.Config{SessionOptions: gsessions.Options{Secure: true, HttpOnly: true}}, []byte(sessionSecret))
-	if err != nil {
-		log.Fatal(err)
-	}
 
-	m.Use(sessions.Sessions("sproxy_session", store))
-
-	// Health Check URL, so just proxy w/o anything
-	m.Get("/en-US/static/html/status.html", proxy.ServeHTTP)
+	// Health Check URL, so just proxy w/o any processing
+	// This is a static file served by the splunk web server
+	m.Get(cfg.HealthCheckPath, proxy.ServeHTTP)
 
 	// Google Auth
-	m.Get("/auth/google", dmv.AuthGoogle(googleOpts))
-
-	m.Get("/auth/callback/google", dmv.AuthGoogle(googleOpts), func(goog *dmv.Google, s sessions.Session, rw http.ResponseWriter, req *http.Request) {
-		// Handle any errors.
-		if len(goog.Errors) > 0 {
-			http.Error(rw, "Oauth failure", http.StatusInternalServerError)
-			return
-		}
-
-		fmt.Printf("CALLBACK: %+v\n", goog)
-
-		s.Set("GoogleID", goog.Profile.ID)
-		s.Set("email", goog.Profile.Email)
-
-		//FIXME: Do the lookup in a different DB and set the OpenIDUser based on that lookup
-		parts := strings.SplitN(goog.Profile.Email, "@", 2)
-		s.Set("OpenIDUser", parts[0])
-
-		http.Redirect(rw, req, "/", http.StatusFound)
-	})
+	m.Get(cfg.AuthPath, dmv.AuthGoogle(googleOpts))
+	m.Get(cfg.CallBackPath, dmv.AuthGoogle(googleOpts), handleCallback)
 
 	// Proxy the rest
 	m.Get("/**", enforceXForwardedProto, authorize, proxy.ServeHTTP)

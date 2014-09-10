@@ -48,6 +48,10 @@
 			"Rev": "aa5e036e6c44aec69a32eb41097001978b29ad31"
 		},
 		{
+			"ImportPath": "github.com/joeshaw/envdecode",
+			"Rev": "add9c24bfa27ae50da536bb62bb90d57974e0b43"
+		},
+		{
 			"ImportPath": "github.com/martini-contrib/sessions",
 			"Rev": "fa13114fbcf036dff8185d728651d85fcef772db"
 		},
