@@ -2,6 +2,8 @@
 
 Proxy designed to sit on a splunk searcher head, but behind an ELB (or other https terminating proxy), to handle the Google OAuth 2.0 flow.
 
+Assumes that splunk usernames are the same as the part of your authentication email address before the @.
+
 # Config Vars
 
 See the Config struct for required and optional config vars and their defaults
