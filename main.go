@@ -80,7 +80,7 @@ func main() {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(pUrl)
-	store, err := bstore.New(db, bstore.Config{SessionOptions: gsessions.Options{Secure: true}}, []byte(sessionSecret))
+	store, err := bstore.New(db, bstore.Config{SessionOptions: gsessions.Options{Secure: true, HttpOnly: true}}, []byte(sessionSecret))
 	if err != nil {
 		log.Fatal(err)
 	}
