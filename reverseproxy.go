@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/martini-contrib/sessions"
 )
 
 // onExitFlushLoop is a callback set by tests to detect the state of the
@@ -94,18 +96,21 @@ var hopHeaders = []string{
 	"Upgrade",
 }
 
-func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+func (p *ReverseProxy) ServeHTTP(s sessions.Session, rw http.ResponseWriter, req *http.Request) {
 	transport := p.Transport
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
 
-    if req.URL.Path == "/en-US/static/html/status.html" {
-        rw.WriteHeader(http.StatusOK)
-        return
-    }
-    log.Println("Request")
-    log.Printf("%+v\n", req)
+	if req.URL.Path == "/en-US/static/html/status.html" {
+		rw.WriteHeader(http.StatusOK)
+		return
+	}
+	log.Println("Request")
+	log.Printf("%+v\n", req)
+	log.Printf("URL: %+v\n", req.URL)
+	log.Printf("URL.Scheme: %+v\n", req.URL.Scheme)
+	log.Printf("URL.Host: %+v\n", req.URL.Host)
 
 	outreq := new(http.Request)
 	*outreq = *req // includes shallow copies of maps, but okay
@@ -143,13 +148,17 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		outreq.Header.Set("X-Forwarded-For", clientIP)
 	}
 
-    log.Println("Modified Request")
-    log.Printf("%+v\n", outreq)
+	email := s.Get("email")
+	parts := strings.SplitN(email.(string), "@", 2)
+	outreq.Header.Set("X-Openid-User", parts[0])
+
+	log.Println("Modified Request")
+	log.Printf("%+v\n", outreq)
 
 	res, err := transport.RoundTrip(outreq)
 
-    log.Println("Response")
-    log.Printf("%+v\n", res)
+	log.Println("Response")
+	log.Printf("%+v\n", res)
 
 	if err != nil {
 		log.Printf("http: proxy error: %v", err)
