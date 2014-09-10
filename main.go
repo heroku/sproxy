@@ -22,21 +22,21 @@ import (
 )
 
 type Config struct {
-	ClientId      string `env:"CLIENT_ID,required"`
-	ClientSecret  string `env:"CLIENT_SECRET,required"`
-	SessionSecret []byte `env:"SESSION_SECRET,required"`
-	DNSName       string `env:"DNS_NAME,required"`
+	ClientId      string `env:"CLIENT_ID,required"`      // Google Client ID
+	ClientSecret  string `env:"CLIENT_SECRET,required"`  // Google Client Secret
+	SessionSecret []byte `env:"SESSION_SECRET,required"` // Random session encruption token
+	DNSName       string `env:"DNS_NAME,required"`       // Public facing DNS Hostname
 
-	SessionDBPath string `env:"SESSION_DB_PATH,default=./sessions.db"`
-	ProxyURL      string `env:"PROXY_URL,default=http://localhost:8000/"`
-	CookieName    string `env:"COOKIE_NAME,default=sproxy_session"`
+	SessionDBPath string `env:"SESSION_DB_PATH,default=./sessions.db"`    // Path to session database, including db name
+	ProxyURL      string `env:"PROXY_URL,default=http://localhost:8000/"` // URL to Proxy to
+	CookieName    string `env:"COOKIE_NAME,default=sproxy_session"`       // The name of the cookie
 
-	CallBackPath string `env:"CALLBACK_PATH,default=/auth/callback/google"`
-	AuthPath     string `env:"AUTH_PATH,default=/auth/google"`
+	CallBackPath string `env:"CALLBACK_PATH,default=/auth/callback/google"` // Callback URL
+	AuthPath     string `env:"AUTH_PATH,default=/auth/google"`              // Auth Path
 
-	HealthCheckPath string `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/status.html"`
+	HealthCheckPath string `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/status.html"` // Health Check path in splunk, this path is proxied w/o auth
 
-	EmailSuffix string `env:"EMAIL_SUFFIX,default=@heroku.com"`
+	EmailSuffix string `env:"EMAIL_SUFFIX,default=@heroku.com"` // Required email suffix. Emails w/o this suffix will not be let in
 }
 
 var (
