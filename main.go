@@ -24,7 +24,6 @@ var (
 	clientId      = os.Getenv("CLIENT_ID")
 	clientSecret  = os.Getenv("CLIENT_SECRET")
 	sessionSecret = os.Getenv("SESSION_SECRET")
-	db            *bolt.DB
 )
 
 func authorize(s sessions.Session, rw http.ResponseWriter, req *http.Request) {
@@ -33,8 +32,11 @@ func authorize(s sessions.Session, rw http.ResponseWriter, req *http.Request) {
 		http.Redirect(rw, req, "/auth/google", http.StatusFound)
 		return
 	}
-	parts := strings.SplitN(email.(string), "@", 2)
-	req.Header.Set("X-Openid-User", parts[0])
+
+	openIDUser := s.Get("OpenIDUser")
+	if openIDUser != nil && openIDUser != "" {
+		req.Header.Set("X-Openid-User", openIDUser.(string))
+	}
 }
 
 func enforceXForwardedProto(rw http.ResponseWriter, req *http.Request) {
@@ -99,7 +101,14 @@ func main() {
 		}
 
 		fmt.Printf("CALLBACK: %+v\n", goog)
+
+		s.Set("GoogleID", goog.Profile.ID)
 		s.Set("email", goog.Profile.Email)
+
+		//FIXME: Do the lookup in a different DB and set the OpenIDUser based on that lookup
+		parts := strings.SplitN(goog.Profile.Email, "@", 2)
+		s.Set("OpenIDUser", parts[0])
+
 		http.Redirect(rw, req, "/", http.StatusFound)
 	})
 
