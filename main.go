@@ -36,7 +36,7 @@ type Config struct {
 	CallBackPath string `env:"CALLBACK_PATH,default=/auth/callback/google"` // Callback URL
 	AuthPath     string `env:"AUTH_PATH,default=/auth/google"`              // Auth Path
 
-	HealthCheckPath string `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/status.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
+	HealthCheckPath string `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
 
 	EmailSuffix string `env:"EMAIL_SUFFIX,default=@heroku.com"` // Required email suffix. Emails w/o this suffix will not be let in
 }
