@@ -21,5 +21,8 @@ See the Config struct for required and optional config vars and their defaults
 * Under "APIs & Auth", click "Consent screen"
 * Enter your/an email address, Product Name, click "Save". What you enter here will appear on the Google OAuth pages when authenticating.
 
+# What about first Login?
+
+* visit "https://**the.host.domain**", do the oauth dance and then visit "https://**the.host.domain**/en-US/account/logout" and enter the default admin user/password so you can log into the UI and setup your users.
 
 FIXME: More info
