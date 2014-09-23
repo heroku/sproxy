@@ -81,7 +81,7 @@ func handleCallback(goog *dmv.Google, s sessions.Session, rw http.ResponseWriter
 		http.Error(rw, "Unable to determine OpenIDUser from email `"+goog.Profile.Email+"`", http.StatusInternalServerError)
 		return
 	}
-	s.Set("OpenIDUser", parts[0])
+	s.Set("OpenIDUser", strings.ToLower(parts[0]))
 
 	http.Redirect(rw, req, "/", http.StatusFound)
 }
