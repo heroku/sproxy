@@ -3,22 +3,18 @@ package main
 import (
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"strings"
 
-	"github.com/go-martini/martini"
-	"github.com/martini-contrib/sessions"
-
-	"github.com/tomsteele/dmv"
-
-	"net/http/httputil"
-
 	"github.com/boltdb/bolt"
+	"github.com/go-martini/martini"
 	gsessions "github.com/gorilla/sessions"
+	"github.com/joeshaw/envdecode"
+	"github.com/martini-contrib/sessions"
+	"github.com/tomsteele/dmv"
 	"github.com/yosssi/boltstore/reaper"
 	bstore "github.com/yosssi/boltstore/store"
-
-	"github.com/joeshaw/envdecode"
 )
 
 type config struct {
