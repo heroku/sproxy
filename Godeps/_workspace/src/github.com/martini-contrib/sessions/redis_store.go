@@ -1,8 +1,8 @@
 package sessions
 
 import (
-	"github.com/boj/redistore"
-	"github.com/gorilla/sessions"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/boj/redistore"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/gorilla/sessions"
 )
 
 // RedisStore is an interface that represents a Cookie based storage

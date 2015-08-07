@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"code.google.com/p/goauth2/oauth"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/code.google.com/p/goauth2/oauth"
 )
 
 // OAuth2Options contains options for complete OAuth2.0.

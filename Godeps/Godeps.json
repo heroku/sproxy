@@ -1,6 +1,9 @@
 {
 	"ImportPath": "github.com/heroku/sproxy",
-	"GoVersion": "go1.3",
+	"GoVersion": "go1.4.2",
+	"Packages": [
+		"./..."
+	],
 	"Deps": [
 		{
 			"ImportPath": "code.google.com/p/goauth2/oauth",
@@ -8,18 +11,9 @@
 			"Rev": "afe77d958c701557ec5dc56f6936fcc194d15520"
 		},
 		{
-			"ImportPath": "code.google.com/p/gogoprotobuf/proto",
-			"Rev": "6c980277330804e94257ac7ef70a3adbe1641059"
-		},
-		{
 			"ImportPath": "github.com/boj/redistore",
 			"Comment": "v1",
 			"Rev": "9d1554b400d726c7aa54b6e4a836f273b72b97f7"
-		},
-		{
-			"ImportPath": "github.com/boltdb/bolt",
-			"Comment": "data/v1-246-g02639b8",
-			"Rev": "02639b84ed37416ec671ac3ac1450734c398ee02"
 		},
 		{
 			"ImportPath": "github.com/codegangsta/inject",
@@ -58,21 +52,6 @@
 		{
 			"ImportPath": "github.com/tomsteele/dmv",
 			"Rev": "c63981c0bade313c35c31c7c2bd91732651bb722"
-		},
-		{
-			"ImportPath": "github.com/yosssi/boltstore/reaper",
-			"Comment": "v1.0.0-4-g9873ef6",
-			"Rev": "9873ef61c6e59fafe312e01a82d11c96f67ec189"
-		},
-		{
-			"ImportPath": "github.com/yosssi/boltstore/shared",
-			"Comment": "v1.0.0-4-g9873ef6",
-			"Rev": "9873ef61c6e59fafe312e01a82d11c96f67ec189"
-		},
-		{
-			"ImportPath": "github.com/yosssi/boltstore/store",
-			"Comment": "v1.0.0-4-g9873ef6",
-			"Rev": "9873ef61c6e59fafe312e01a82d11c96f67ec189"
 		}
 	]
 }

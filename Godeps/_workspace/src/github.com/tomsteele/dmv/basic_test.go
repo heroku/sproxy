@@ -3,7 +3,7 @@ package dmv
 import (
 	"encoding/base64"
 	"fmt"
-	"github.com/go-martini/martini"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/go-martini/martini"
 	"net/http"
 	"net/http/httptest"
 	"strings"

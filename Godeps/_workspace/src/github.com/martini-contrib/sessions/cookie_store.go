@@ -1,7 +1,7 @@
 package sessions
 
 import (
-	"github.com/gorilla/sessions"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/gorilla/sessions"
 )
 
 // CookieStore is an interface that represents a Cookie based storage

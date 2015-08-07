@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/go-martini/martini"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/go-martini/martini"
 )
 
 var (

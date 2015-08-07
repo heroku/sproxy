@@ -7,10 +7,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/go-martini/martini"
-	"github.com/joeshaw/envdecode"
-	"github.com/martini-contrib/sessions"
-	"github.com/tomsteele/dmv"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/go-martini/martini"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/joeshaw/envdecode"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/martini-contrib/sessions"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/tomsteele/dmv"
 )
 
 type config struct {

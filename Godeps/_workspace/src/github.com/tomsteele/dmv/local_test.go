@@ -3,7 +3,7 @@ package dmv
 import (
 	"bytes"
 	"fmt"
-	"github.com/go-martini/martini"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/go-martini/martini"
 	"net/http"
 	"net/http/httptest"
 	"net/url"

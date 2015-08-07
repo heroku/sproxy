@@ -20,9 +20,9 @@
 package sessions
 
 import (
-	"github.com/go-martini/martini"
-	"github.com/gorilla/context"
-	"github.com/gorilla/sessions"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/go-martini/martini"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/gorilla/context"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/gorilla/sessions"
 	"log"
 	"net/http"
 )

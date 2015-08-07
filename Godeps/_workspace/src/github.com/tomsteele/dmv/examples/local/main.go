@@ -7,10 +7,10 @@ package main
 
 import (
 	"code.google.com/p/go.crypto/bcrypt"
-	"github.com/go-martini/martini"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/go-martini/martini"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/martini-contrib/sessions"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/tomsteele/dmv"
 	"github.com/martini-contrib/render"
-	"github.com/martini-contrib/sessions"
-	"github.com/tomsteele/dmv"
 	"labix.org/v2/mgo"
 	"labix.org/v2/mgo/bson"
 )

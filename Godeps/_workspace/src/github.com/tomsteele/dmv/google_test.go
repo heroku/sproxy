@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/go-martini/martini"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/go-martini/martini"
 )
 
 func TestLoginRedirect(t *testing.T) {

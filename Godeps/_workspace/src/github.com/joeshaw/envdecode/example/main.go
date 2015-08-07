@@ -22,7 +22,7 @@ package main
 import (
 	"log"
 
-	"github.com/joeshaw/envdecode"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/joeshaw/envdecode"
 )
 
 type config struct {

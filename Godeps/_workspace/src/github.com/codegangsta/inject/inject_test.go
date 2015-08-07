@@ -2,7 +2,7 @@ package inject_test
 
 import (
 	"fmt"
-	"github.com/codegangsta/inject"
+	"github.com/heroku/sproxy/Godeps/_workspace/src/github.com/codegangsta/inject"
 	"reflect"
 	"testing"
 )
