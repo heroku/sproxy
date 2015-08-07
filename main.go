@@ -21,28 +21,28 @@ import (
 	"github.com/joeshaw/envdecode"
 )
 
-type Config struct {
-	ClientId      string `env:"CLIENT_ID,required"`      // Google Client ID
-	ClientSecret  string `env:"CLIENT_SECRET,required"`  // Google Client Secret
-	SessionSecret string `env:"SESSION_SECRET,required"` // Random session encruption token
-	DNSName       string `env:"DNS_NAME,required"`       // Public facing DNS Hostname
+type config struct {
+	clientID      string `env:"CLIENT_ID,required"`      // Google Client ID
+	clientSecret  string `env:"CLIENT_SECRET,required"`  // Google Client Secret
+	sessionSecret string `env:"SESSION_SECRET,required"` // Random session encruption token
+	dnsName       string `env:"DNS_NAME,required"`       // Public facing DNS Hostname
 
-	SessionDBPath string `env:"SESSION_DB_PATH,default=./sessions.db"` // Path to session database, including db name
-	CookieMaxAge  int    `env:"COOKIE_MAX_AGE,default=1440"`           // Cookie MaxAge, Defaults to 1 day
-	CookieName    string `env:"COOKIE_NAME,default=sproxy_session"`    // The name of the cookie
+	sessionDBPath string `env:"SESSION_DB_PATH,default=./sessions.db"` // Path to session database, including db name
+	cookieMaxAge  int    `env:"COOKIE_MAX_AGE,default=1440"`           // Cookie MaxAge, Defaults to 1 day
+	cookieName    string `env:"COOKIE_NAME,default=sproxy_session"`    // The name of the cookie
 
-	ProxyURL string `env:"PROXY_URL,default=http://localhost:8000/"` // URL to Proxy to
+	proxyURL string `env:"PROXY_URL,default=http://localhost:8000/"` // URL to Proxy to
 
-	CallBackPath string `env:"CALLBACK_PATH,default=/auth/callback/google"` // Callback URL
-	AuthPath     string `env:"AUTH_PATH,default=/auth/google"`              // Auth Path
+	callBackPath string `env:"CALLBACK_PATH,default=/auth/callback/google"` // Callback URL
+	authPath     string `env:"AUTH_PATH,default=/auth/google"`              // Auth Path
 
-	HealthCheckPath string `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
+	healthCheckPath string `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
 
-	EmailSuffix string `env:"EMAIL_SUFFIX,default=@heroku.com"` // Required email suffix. Emails w/o this suffix will not be let in
+	emailSuffix string `env:"EMAIL_SUFFIX,default=@heroku.com"` // Required email suffix. Emails w/o this suffix will not be let in
 }
 
 var (
-	cfg              = Config{}
+	cfg              = config{}
 	oAuthScopes      = []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"}
 	sessionOptions   = gsessions.Options{Secure: true, HttpOnly: true}
 	boltStoreOptions = bstore.Config{SessionOptions: sessionOptions}
@@ -51,8 +51,8 @@ var (
 // Authorize the user based on email and a set OpenIDUser
 func authorize(s sessions.Session, rw http.ResponseWriter, req *http.Request) {
 	email := s.Get("email")
-	if email == nil || !strings.HasSuffix(email.(string), cfg.EmailSuffix) {
-		http.Redirect(rw, req, cfg.AuthPath, http.StatusFound)
+	if email == nil || !strings.HasSuffix(email.(string), cfg.emailSuffix) {
+		http.Redirect(rw, req, cfg.authPath, http.StatusFound)
 		return
 	}
 
@@ -61,7 +61,7 @@ func authorize(s sessions.Session, rw http.ResponseWriter, req *http.Request) {
 		req.Header.Set("X-Openid-User", openIDUser.(string))
 	} else {
 		// No openIDUser set, so abort and restart the auth flow
-		http.Redirect(rw, req, cfg.AuthPath, http.StatusFound)
+		http.Redirect(rw, req, cfg.authPath, http.StatusFound)
 	}
 }
 
@@ -107,16 +107,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	sessionOptions.MaxAge = cfg.CookieMaxAge
+	sessionOptions.MaxAge = cfg.cookieMaxAge
 
 	googleOpts := &dmv.OAuth2Options{
-		ClientID:     cfg.ClientId,
-		ClientSecret: cfg.ClientSecret,
-		RedirectURL:  "https://" + cfg.DNSName + cfg.CallBackPath,
+		ClientID:     cfg.clientID,
+		ClientSecret: cfg.clientSecret,
+		RedirectURL:  "https://" + cfg.dnsName + cfg.callBackPath,
 		Scopes:       oAuthScopes,
 	}
 
-	sessionDB, err := bolt.Open(cfg.SessionDBPath, 0666, nil)
+	sessionDB, err := bolt.Open(cfg.sessionDBPath, 0666, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -126,28 +126,28 @@ func main() {
 
 	m := martini.Classic()
 
-	pUrl, err := url.Parse(cfg.ProxyURL)
+	pURL, err := url.Parse(cfg.proxyURL)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	store, err := bstore.New(sessionDB, boltStoreOptions, []byte(cfg.SessionSecret))
+	store, err := bstore.New(sessionDB, boltStoreOptions, []byte(cfg.sessionSecret))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Inject a session when it's needed
-	m.Use(sessions.Sessions(cfg.CookieName, store))
+	m.Use(sessions.Sessions(cfg.cookieName, store))
 
-	proxy := httputil.NewSingleHostReverseProxy(pUrl)
+	proxy := httputil.NewSingleHostReverseProxy(pURL)
 
 	// Health Check URL, so just proxy w/o any processing
-	m.Get(cfg.HealthCheckPath, proxy.ServeHTTP)
+	m.Get(cfg.healthCheckPath, proxy.ServeHTTP)
 
 	// Google Auth
-	m.Get(cfg.AuthPath, dmv.AuthGoogle(googleOpts))
-	m.Get(cfg.CallBackPath, dmv.AuthGoogle(googleOpts), handleCallback)
+	m.Get(cfg.authPath, dmv.AuthGoogle(googleOpts))
+	m.Get(cfg.callBackPath, dmv.AuthGoogle(googleOpts), handleCallback)
 
 	// Proxy the rest
 	m.Get("/**", enforceXForwardedProto, authorize, proxy.ServeHTTP)
