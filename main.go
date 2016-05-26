@@ -38,7 +38,8 @@ type Config struct {
 
 	HealthCheckPath string `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
 
-	EmailSuffix string `env:"EMAIL_SUFFIX,default=@heroku.com"` // Required email suffix. Emails w/o this suffix will not be let in
+	EmailSuffix  string   `env:"EMAIL_SUFFIX,default=@heroku.com"` // Required email suffix. Emails w/o this suffix will not be let in
+	AllowedUsers []string `env:"ALLOWED_USERS"`
 }
 
 var (
@@ -51,7 +52,7 @@ var (
 // Authorize the user based on email and a set OpenIDUser
 func authorize(s sessions.Session, rw http.ResponseWriter, req *http.Request) {
 	email := s.Get("email")
-	if email == nil || !strings.HasSuffix(email.(string), cfg.EmailSuffix) {
+	if email == nil || !isAllowed(email.(string)) {
 		http.Redirect(rw, req, cfg.AuthPath, http.StatusFound)
 		return
 	}
@@ -63,6 +64,20 @@ func authorize(s sessions.Session, rw http.ResponseWriter, req *http.Request) {
 		// No openIDUser set, so abort and restart the auth flow
 		http.Redirect(rw, req, cfg.AuthPath, http.StatusFound)
 	}
+}
+
+func isAllowed(e string) bool {
+	if strings.HasSuffix(e, cfg.EmailSuffix) {
+		return true
+	}
+
+	for _, a := range cfg.AllowedUsers {
+		if e == a {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Set the OpenIDUser and other session values based on the data from Google
