@@ -1,159 +1,207 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 
-	"github.com/go-martini/martini"
-	"github.com/martini-contrib/sessions"
-
-	"github.com/tomsteele/dmv"
-
-	"net/http/httputil"
-
-	"github.com/boltdb/bolt"
-	gsessions "github.com/gorilla/sessions"
-	"github.com/yosssi/boltstore/reaper"
-	bstore "github.com/yosssi/boltstore/store"
-
+	"github.com/gorilla/sessions"
 	"github.com/joeshaw/envdecode"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
 
-type Config struct {
-	ClientId      string `env:"CLIENT_ID,required"`      // Google Client ID
-	ClientSecret  string `env:"CLIENT_SECRET,required"`  // Google Client Secret
-	SessionSecret string `env:"SESSION_SECRET,required"` // Random session encruption token
-	DNSName       string `env:"DNS_NAME,required"`       // Public facing DNS Hostname
-
-	SessionDBPath string `env:"SESSION_DB_PATH,default=./sessions.db"` // Path to session database, including db name
-	CookieMaxAge  int    `env:"COOKIE_MAX_AGE,default=1440"`           // Cookie MaxAge, Defaults to 1 day
-	CookieName    string `env:"COOKIE_NAME,default=sproxy_session"`    // The name of the cookie
-
-	ProxyURL string `env:"PROXY_URL,default=http://localhost:8000/"` // URL to Proxy to
-
-	CallBackPath string `env:"CALLBACK_PATH,default=/auth/callback/google"` // Callback URL
-	AuthPath     string `env:"AUTH_PATH,default=/auth/google"`              // Auth Path
-
-	HealthCheckPath string `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
-
-	EmailSuffix string `env:"EMAIL_SUFFIX,default=@heroku.com"` // Required email suffix. Emails w/o this suffix will not be let in
+type config struct {
+	ClientID              string   `env:"CLIENT_ID,required"`                                       // Google Client ID
+	ClientSecret          string   `env:"CLIENT_SECRET,required"`                                   // Google Client Secret
+	SessionSecret         string   `env:"SESSION_SECRET,required"`                                  // Random session auth key
+	SessionEncrypttionKey string   `env:"SESSION_ENCRYPTION_KEY,required"`                          // Random session encryption key
+	DNSName               string   `env:"DNS_NAME,required"`                                        // Public facing DNS Hostname
+	CookieMaxAge          int      `env:"COOKIE_MAX_AGE,default=1440"`                              // Cookie MaxAge, Defaults to 1 day
+	CookieName            string   `env:"COOKIE_NAME,default=sproxy_session"`                       // The name of the cookie
+	ProxyURL              *url.URL `env:"PROXY_URL,default=http://localhost:8000/"`                 // URL to Proxy to
+	CallbackPath          string   `env:"CALLBACK_PATH,default=/auth/callback/google"`              // Callback URL
+	HealthCheckPath       string   `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
+	EmailSuffix           string   `env:"EMAIL_SUFFIX,default=@heroku.com"`                         // Required email suffix. Emails w/o this suffix will not be let in
+	StateToken            string   `env:"STATE_TOKEN,required"`                                     // Token used when communicating with Google Oauth2 provider
 }
 
-var (
-	cfg              = Config{}
-	oAuthScopes      = []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"}
-	sessionOptions   = gsessions.Options{Secure: true, HttpOnly: true}
-	boltStoreOptions = bstore.Config{SessionOptions: sessionOptions}
-)
+// Authorize the user based on the email stored in the named session and matching the suffix. If the email doesn't exist
+// in the session or if the 'OpenIDUser' isn't set in the session, then redirect, otherwise set the X-Openid-User
+// header to what was stored in the session.
+func authorize(name, suffix, redirect string, s sessions.Store, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logPrefix := fmt.Sprintf("app=sproxy fn=authorize method=%s path=%s\n",
+			r.Method, r.URL.Path)
 
-// Authorize the user based on email and a set OpenIDUser
-func authorize(s sessions.Session, rw http.ResponseWriter, req *http.Request) {
-	email := s.Get("email")
-	if email == nil || !strings.HasSuffix(email.(string), cfg.EmailSuffix) {
-		http.Redirect(rw, req, cfg.AuthPath, http.StatusFound)
-		return
-	}
+		session, err := s.Get(r, name)
+		if err != nil {
+			log.Printf("%s auth=failed error=%q\n", logPrefix, err.Error())
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-	openIDUser := s.Get("OpenIDUser")
-	if openIDUser != nil && openIDUser != "" {
-		req.Header.Set("X-Openid-User", openIDUser.(string))
-	} else {
-		// No openIDUser set, so abort and restart the auth flow
-		http.Redirect(rw, req, cfg.AuthPath, http.StatusFound)
-	}
+		email, ok := session.Values["email"]
+		if !ok || email == nil || !strings.HasSuffix(email.(string), suffix) {
+			log.Printf("%s auth=failed missing=Email redirect=%s\n", logPrefix, redirect)
+			http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
+			return
+		}
+
+		openIDUser, ok := session.Values["OpenIDUser"]
+		if !ok || openIDUser == nil {
+			log.Printf("%s auth=failed missing=OpenIDUser redirect=%s\n", logPrefix, redirect)
+			http.Redirect(w, r, redirect, http.StatusFound)
+			return
+		}
+
+		r.Header.Set("X-Openid-User", openIDUser.(string))
+		h.ServeHTTP(w, r)
+	})
+}
+
+// enforceXForwardedProto header is set before processing the handler.
+// If it's not then redirect to the https version of the URL.
+func enforceXForwardedProto(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		xff := r.Header.Get("X-Forwarded-Proto")
+		if xff == "https" {
+			h.ServeHTTP(w, r)
+			return
+		}
+
+		u := new(url.URL)
+		*u = *r.URL
+		u.Scheme = "https"
+		if u.Host == "" {
+			u.Host = r.Host
+		}
+
+		http.Redirect(w, r, u.String(), http.StatusFound)
+	})
 }
 
 // Set the OpenIDUser and other session values based on the data from Google
-func handleCallback(goog *dmv.Google, s sessions.Session, rw http.ResponseWriter, req *http.Request) {
-	// Handle any errors.
-	if len(goog.Errors) > 0 {
-		http.Error(rw, "Oauth failure", http.StatusInternalServerError)
-		return
-	}
+func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sessions.Store) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logPrefix := fmt.Sprintf("app=sproxy fn=callback method=%s path=%s\n",
+			r.Method, r.URL.Path)
 
-	s.Set("GoogleID", goog.Profile.ID)
-	s.Set("email", goog.Profile.Email)
-
-	parts := strings.SplitN(goog.Profile.Email, "@", 2)
-	if len(parts) < 2 {
-		http.Error(rw, "Unable to determine OpenIDUser from email `"+goog.Profile.Email+"`", http.StatusInternalServerError)
-		return
-	}
-	s.Set("OpenIDUser", strings.ToLower(parts[0]))
-
-	http.Redirect(rw, req, "/", http.StatusFound)
-}
-
-// Ensure that we're being proxied to ourselves via https
-func enforceXForwardedProto(rw http.ResponseWriter, req *http.Request) {
-	xff := req.Header.Get("X-Forwarded-Proto")
-	if xff != "https" {
-		u := new(url.URL)
-		*u = *req.URL
-		u.Scheme = "https"
-		if u.Host == "" {
-			u.Host = req.Host
+		if v := r.FormValue("state"); v != token {
+			log.Printf("%s callback=failed error=%s\n", logPrefix, fmt.Sprintf("Bad state token: %s", v))
+			http.Error(w, "Bad Request", http.StatusBadRequest)
+			return
 		}
 
-		http.Redirect(rw, req, u.String(), http.StatusFound)
-	}
+		ctx := context.Background()
+		t, err := o2c.Exchange(r.Context(), r.FormValue("code"))
+		if err != nil {
+			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		gp, err := fetchGoogleProfile(ctx, t, o2c)
+		if err != nil {
+			log.Printf("%s %s\n", logPrefix, err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if gp.Email == "" || !strings.HasSuffix(gp.Email, suffix) {
+			err := fmt.Errorf("Invalid Google Profile Email: %q", gp.Email)
+			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+
+		session, err := s.Get(r, name)
+		if err != nil {
+			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		session.Values["email"] = gp.Email
+		session.Values["GoogleID"] = gp.ID
+
+		parts := strings.SplitN(gp.Email, "@", 2)
+		if len(parts) < 2 {
+			err := fmt.Errorf("Unable to determine OpenIDUser from email %q", gp.Email)
+			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		session.Values["OpenIDUser"] = strings.ToLower(parts[0])
+
+		if err := session.Save(r, w); err != nil {
+			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		log.Printf("%s callback=successful\n", logPrefix)
+		http.Redirect(w, r, "/", http.StatusFound)
+	})
 }
 
 func main() {
-
-	err := envdecode.Decode(&cfg)
-	if err != nil {
+	var cfg config
+	if err := envdecode.Decode(&cfg); err != nil {
 		log.Fatal(err)
 	}
-	sessionOptions.MaxAge = cfg.CookieMaxAge
 
-	googleOpts := &dmv.OAuth2Options{
-		ClientID:     cfg.ClientId,
+	switch len(cfg.SessionEncrypttionKey) {
+	case 16, 24, 32:
+	default:
+		log.Fatal("Length of SESSION_ENCRYPTION_KEY is not 16, 24 or 32")
+	}
+
+	o2c := &oauth2.Config{
+		ClientID:     cfg.ClientID,
 		ClientSecret: cfg.ClientSecret,
-		RedirectURL:  "https://" + cfg.DNSName + cfg.CallBackPath,
-		Scopes:       oAuthScopes,
+		RedirectURL:  "https://" + cfg.DNSName + cfg.CallbackPath,
+		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
+		Endpoint:     google.Endpoint,
 	}
 
-	sessionDB, err := bolt.Open(cfg.SessionDBPath, 0666, nil)
-	if err != nil {
-		log.Fatal(err)
+	store := sessions.NewCookieStore([]byte(cfg.SessionSecret), []byte(cfg.SessionEncrypttionKey))
+	store.Options.MaxAge = cfg.CookieMaxAge
+	store.Options.Secure = true
+
+	http.Handle(cfg.CallbackPath,
+		handleGoogleCallback(
+			cfg.StateToken, cfg.CookieName, cfg.EmailSuffix,
+			o2c,
+			store,
+		),
+	)
+
+	proxy := httputil.NewSingleHostReverseProxy(cfg.ProxyURL)
+	http.Handle(cfg.HealthCheckPath, proxy)
+	http.Handle("/",
+		enforceXForwardedProto(
+			authorize(
+				cfg.CookieName, cfg.EmailSuffix, o2c.AuthCodeURL(cfg.StateToken, oauth2.AccessTypeOnline),
+				store,
+				proxy,
+			),
+		),
+	)
+
+	host := os.Getenv("HOST")
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "5000"
 	}
 
-	defer sessionDB.Close()
-	defer reaper.Quit(reaper.Run(sessionDB, reaper.Options{}))
+	listen := host + ":" + port
+	log.Println("Listening on", listen)
 
-	m := martini.Classic()
-
-	pUrl, err := url.Parse(cfg.ProxyURL)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	store, err := bstore.New(sessionDB, boltStoreOptions, []byte(cfg.SessionSecret))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Inject a session when it's needed
-	m.Use(sessions.Sessions(cfg.CookieName, store))
-
-	proxy := httputil.NewSingleHostReverseProxy(pUrl)
-
-	// Health Check URL, so just proxy w/o any processing
-	m.Get(cfg.HealthCheckPath, proxy.ServeHTTP)
-
-	// Google Auth
-	m.Get(cfg.AuthPath, dmv.AuthGoogle(googleOpts))
-	m.Get(cfg.CallBackPath, dmv.AuthGoogle(googleOpts), handleCallback)
-
-	// Proxy the rest
-	m.Get("/**", enforceXForwardedProto, authorize, proxy.ServeHTTP)
-	m.Put("/**", enforceXForwardedProto, authorize, proxy.ServeHTTP)
-	m.Post("/**", enforceXForwardedProto, authorize, proxy.ServeHTTP)
-	m.Delete("/**", enforceXForwardedProto, authorize, proxy.ServeHTTP)
-	m.Options("/**", enforceXForwardedProto, authorize, proxy.ServeHTTP)
-	m.Run()
+	log.Fatal(http.ListenAndServe(listen, nil))
 }
