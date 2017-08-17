@@ -36,21 +36,30 @@ type config struct {
 // header to what was stored in the session.
 func authorize(name, suffix, redirect string, s sessions.Store, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logPrefix := fmt.Sprintf("app=sproxy fn=authorize method=%s path=%s\n",
+			r.Method, r.URL.Path)
+
 		session, err := s.Get(r, name)
 		if err != nil {
-			log.Printf("error getting session: %q\n", err.Error())
+			log.Printf("%s auth=failed error=%q\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if email, ok := session.Values["email"]; !ok || email == nil || !strings.HasSuffix(email.(string), suffix) {
+
+		email, ok := session.Values["email"]
+		if !ok || email == nil || !strings.HasSuffix(email.(string), suffix) {
+			log.Printf("%s auth=failed missing=Email redirect=%s\n", logPrefix, redirect)
 			http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
 			return
 		}
+
 		openIDUser, ok := session.Values["OpenIDUser"]
 		if !ok || openIDUser == nil {
+			log.Printf("%s auth=failed missing=OpenIDUser redirect=%s\n", logPrefix, redirect)
 			http.Redirect(w, r, redirect, http.StatusFound)
 			return
 		}
+
 		r.Header.Set("X-Openid-User", openIDUser.(string))
 		h.ServeHTTP(w, r)
 	})
@@ -80,8 +89,11 @@ func enforceXForwardedProto(h http.Handler) http.Handler {
 // Set the OpenIDUser and other session values based on the data from Google
 func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sessions.Store) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logPrefix := fmt.Sprintf("app=sproxy fn=callback method=%s path=%s\n",
+			r.Method, r.URL.Path)
+
 		if v := r.FormValue("state"); v != token {
-			log.Printf("Bad state token %q\n", v)
+			log.Printf("%s callback=failed error=%s\n", logPrefix, fmt.Sprintf("Bad state token: %s", v))
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
 		}
@@ -89,47 +101,50 @@ func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sess
 		ctx := context.Background()
 		t, err := o2c.Exchange(r.Context(), r.FormValue("code"))
 		if err != nil {
-			log.Printf("Error during oauth exchange: %s\n", err.Error())
+			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		gp, err := fetchGoogleProfile(ctx, t, o2c)
 		if err != nil {
-			log.Println(err.Error())
+			log.Printf("%s %s\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		if gp.Email == "" || !strings.HasSuffix(gp.Email, suffix) {
 			err := fmt.Errorf("Invalid Google Profile Email: %q", gp.Email)
-			log.Println(err)
+			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
 
 		session, err := s.Get(r, name)
 		if err != nil {
-			log.Printf("error getting session: %q\n", err.Error())
+			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+
 		session.Values["email"] = gp.Email
 		session.Values["GoogleID"] = gp.ID
 
 		parts := strings.SplitN(gp.Email, "@", 2)
 		if len(parts) < 2 {
 			err := fmt.Errorf("Unable to determine OpenIDUser from email %q", gp.Email)
-			log.Println(err)
+			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
 		session.Values["OpenIDUser"] = strings.ToLower(parts[0])
 
 		if err := session.Save(r, w); err != nil {
-			log.Printf("Error Saving Session: %q\n", err.Error())
+			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
+		log.Printf("%s callback=successful\n", logPrefix)
 		http.Redirect(w, r, "/", http.StatusFound)
 	})
 }
@@ -178,16 +193,15 @@ func main() {
 		),
 	)
 
-	// Here to emulate martini classic
 	host := os.Getenv("HOST")
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "3000"
+		port = "5000"
 	}
 
 	listen := host + ":" + port
-	fmt.Println("Listening on", listen)
+	log.Println("Listening on", listen)
 
-	http.ListenAndServe(listen, nil)
+	log.Fatal(http.ListenAndServe(listen, nil))
 }
