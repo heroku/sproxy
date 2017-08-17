@@ -17,18 +17,18 @@ import (
 )
 
 type config struct {
-	clientID              string   `env:"CLIENT_ID,required"`                                       // Google Client ID
-	clientSecret          string   `env:"CLIENT_SECRET,required"`                                   // Google Client Secret
-	sessionSecret         string   `env:"SESSION_SECRET,required"`                                  // Random session auth key
-	sessionEncrypttionKey string   `env:"SESSION_ENCRYPTION_KEY,required"`                          // Random session encryption key
-	dnsName               string   `env:"DNS_NAME,required"`                                        // Public facing DNS Hostname
-	cookieMaxAge          int      `env:"COOKIE_MAX_AGE,default=1440"`                              // Cookie MaxAge, Defaults to 1 day
-	cookieName            string   `env:"COOKIE_NAME,default=sproxy_session"`                       // The name of the cookie
-	proxyURL              *url.URL `env:"PROXY_URL,default=http://localhost:8000/"`                 // URL to Proxy to
-	callbackPath          string   `env:"CALLBACK_PATH,default=/auth/callback/google"`              // Callback URL
-	healthCheckPath       string   `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
-	emailSuffix           string   `env:"EMAIL_SUFFIX,default=@heroku.com"`                         // Required email suffix. Emails w/o this suffix will not be let in
-	stateToken            string   `env:"STATE_TOKEN,required"`                                     // Token used when communicating with Google Oauth2 provider
+	ClientID              string   `env:"CLIENT_ID,required"`                                       // Google Client ID
+	ClientSecret          string   `env:"CLIENT_SECRET,required"`                                   // Google Client Secret
+	SessionSecret         string   `env:"SESSION_SECRET,required"`                                  // Random session auth key
+	SessionEncrypttionKey string   `env:"SESSION_ENCRYPTION_KEY,required"`                          // Random session encryption key
+	DNSName               string   `env:"DNS_NAME,required"`                                        // Public facing DNS Hostname
+	CookieMaxAge          int      `env:"COOKIE_MAX_AGE,default=1440"`                              // Cookie MaxAge, Defaults to 1 day
+	CookieName            string   `env:"COOKIE_NAME,default=sproxy_session"`                       // The name of the cookie
+	ProxyURL              *url.URL `env:"PROXY_URL,default=http://localhost:8000/"`                 // URL to Proxy to
+	CallbackPath          string   `env:"CALLBACK_PATH,default=/auth/callback/google"`              // Callback URL
+	HealthCheckPath       string   `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
+	EmailSuffix           string   `env:"EMAIL_SUFFIX,default=@heroku.com"`                         // Required email suffix. Emails w/o this suffix will not be let in
+	StateToken            string   `env:"STATE_TOKEN,required"`                                     // Token used when communicating with Google Oauth2 provider
 }
 
 // Authorize the user based on the email stored in the named session and matching the suffix. If the email doesn't exist
@@ -140,38 +140,38 @@ func main() {
 		log.Fatal(err)
 	}
 
-	switch len(cfg.sessionEncrypttionKey) {
+	switch len(cfg.SessionEncrypttionKey) {
 	case 16, 24, 32:
 	default:
 		log.Fatal("Length of SESSION_ENCRYPTION_KEY is not 16, 24 or 32")
 	}
 
 	o2c := &oauth2.Config{
-		ClientID:     cfg.clientID,
-		ClientSecret: cfg.clientSecret,
-		RedirectURL:  "https://" + cfg.dnsName + cfg.callbackPath,
+		ClientID:     cfg.ClientID,
+		ClientSecret: cfg.ClientSecret,
+		RedirectURL:  "https://" + cfg.DNSName + cfg.CallbackPath,
 		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
 		Endpoint:     google.Endpoint,
 	}
 
-	store := sessions.NewCookieStore([]byte(cfg.sessionSecret), []byte(cfg.sessionEncrypttionKey))
-	store.Options.MaxAge = cfg.cookieMaxAge
+	store := sessions.NewCookieStore([]byte(cfg.SessionSecret), []byte(cfg.SessionEncrypttionKey))
+	store.Options.MaxAge = cfg.CookieMaxAge
 	store.Options.Secure = true
 
-	http.Handle(cfg.callbackPath,
+	http.Handle(cfg.CallbackPath,
 		handleGoogleCallback(
-			cfg.stateToken, cfg.cookieName, cfg.emailSuffix,
+			cfg.StateToken, cfg.CookieName, cfg.EmailSuffix,
 			o2c,
 			store,
 		),
 	)
 
-	proxy := httputil.NewSingleHostReverseProxy(cfg.proxyURL)
-	http.Handle(cfg.healthCheckPath, proxy)
+	proxy := httputil.NewSingleHostReverseProxy(cfg.ProxyURL)
+	http.Handle(cfg.HealthCheckPath, proxy)
 	http.Handle("/",
 		enforceXForwardedProto(
 			authorize(
-				cfg.cookieName, cfg.emailSuffix, o2c.AuthCodeURL(cfg.stateToken, oauth2.AccessTypeOnline),
+				cfg.CookieName, cfg.EmailSuffix, o2c.AuthCodeURL(cfg.StateToken, oauth2.AccessTypeOnline),
 				store,
 				proxy,
 			),
