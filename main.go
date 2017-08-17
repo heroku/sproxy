@@ -183,9 +183,14 @@ func main() {
 	if host == "" {
 		host = "localhost"
 	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3000"
 	}
-	http.ListenAndServe(host+":"+port, nil)
+
+	listen := host + ":" + port
+	fmt.Println("Listening on", listen)
+
+	http.ListenAndServe(listen, nil)
 }
