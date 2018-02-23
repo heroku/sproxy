@@ -48,6 +48,9 @@ func authorize(name, suffix, redirect string, s sessions.Store, h http.Handler) 
 
 		email, ok := session.Values["email"]
 		if !ok || email == nil || !strings.HasSuffix(email.(string), suffix) {
+			if email == nil {
+				email = ""
+			}
 			log.Printf("%s auth=failed missing=Email email=%s redirect=%s\n", logPrefix, email.(string), redirect)
 			http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
 			return
@@ -55,6 +58,9 @@ func authorize(name, suffix, redirect string, s sessions.Store, h http.Handler) 
 
 		openIDUser, ok := session.Values["OpenIDUser"]
 		if !ok || openIDUser == nil {
+			if openIDUser == nil {
+				openIDUser = ""
+			}
 			log.Printf("%s auth=failed missing=OpenIDUser user=%s redirect=%s\n", logPrefix, openIDUser.(string), redirect)
 			http.Redirect(w, r, redirect, http.StatusFound)
 			return
