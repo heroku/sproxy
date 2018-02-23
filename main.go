@@ -48,18 +48,19 @@ func authorize(name, suffix, redirect string, s sessions.Store, h http.Handler) 
 
 		email, ok := session.Values["email"]
 		if !ok || email == nil || !strings.HasSuffix(email.(string), suffix) {
-			log.Printf("%s auth=failed missing=Email redirect=%s\n", logPrefix, redirect)
+			log.Printf("%s auth=failed missing=Email email=%s redirect=%s\n", logPrefix, email.(string), redirect)
 			http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
 			return
 		}
 
 		openIDUser, ok := session.Values["OpenIDUser"]
 		if !ok || openIDUser == nil {
-			log.Printf("%s auth=failed missing=OpenIDUser redirect=%s\n", logPrefix, redirect)
+			log.Printf("%s auth=failed missing=OpenIDUser user=%s redirect=%s\n", logPrefix, openIDUser.(string), redirect)
 			http.Redirect(w, r, redirect, http.StatusFound)
 			return
 		}
 
+		log.Printf("%s auth=successful user=%s redirect=%s\n", logPrefix, openIDUser.(string), redirect)
 		r.Header.Set("X-Openid-User", openIDUser.(string))
 		h.ServeHTTP(w, r)
 	})
