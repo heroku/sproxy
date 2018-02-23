@@ -60,7 +60,6 @@ func authorize(name, suffix, redirect string, s sessions.Store, h http.Handler) 
 			return
 		}
 
-		log.Printf("%s auth=successful user=%s redirect=%s\n", logPrefix, openIDUser.(string), redirect)
 		r.Header.Set("X-Openid-User", openIDUser.(string))
 		h.ServeHTTP(w, r)
 	})
