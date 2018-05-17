@@ -134,6 +134,8 @@ func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sess
 			return
 		}
 
+		fmt.Printf("%+v\n", session)
+
 		session.Values["email"] = gp.Email
 		session.Values["GoogleID"] = gp.ID
 
@@ -146,16 +148,15 @@ func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sess
 		}
 
 		session.Values["OpenIDUser"] = strings.ToLower(parts[0])
+		target, ok := session.Values["return_to"].(string)
+		if ok {
+			target = "/"
+		}
 
 		if err := session.Save(r, w); err != nil {
 			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
-		}
-
-		target, ok := session.Values["return_to"].(string)
-		if ok {
-			target = "/"
 		}
 
 		log.Printf("%s callback=successful target=%s\n", logPrefix, target)
