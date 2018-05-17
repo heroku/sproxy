@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/gorilla/sessions"
@@ -16,7 +15,7 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-type config struct {
+type configuration struct {
 	ClientID              string   `env:"CLIENT_ID,required"`                                       // Google Client ID
 	ClientSecret          string   `env:"CLIENT_SECRET,required"`                                   // Google Client Secret
 	SessionSecret         string   `env:"SESSION_SECRET,required"`                                  // Random session auth key
@@ -29,7 +28,11 @@ type config struct {
 	HealthCheckPath       string   `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
 	EmailSuffix           string   `env:"EMAIL_SUFFIX,default=@heroku.com"`                         // Required email suffix. Emails w/o this suffix will not be let in
 	StateToken            string   `env:"STATE_TOKEN,required"`                                     // Token used when communicating with Google Oauth2 provider
+	ServerHost            string   `env:"HOST"`
+	ServerPort            string   `env:"PORT,default=5000"`
 }
+
+var config configuration
 
 // Authorize the user based on the email stored in the named session and matching the suffix. If the email doesn't exist
 // in the session or if the 'OpenIDUser' isn't set in the session, then redirect, otherwise set the X-Openid-User
@@ -163,57 +166,49 @@ func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sess
 }
 
 func main() {
-	var cfg config
-	if err := envdecode.Decode(&cfg); err != nil {
+	if err := envdecode.Decode(&config); err != nil {
 		log.Fatal(err)
 	}
 
-	switch len(cfg.SessionEncrypttionKey) {
+	switch len(config.SessionEncrypttionKey) {
 	case 16, 24, 32:
 	default:
 		log.Fatal("Length of SESSION_ENCRYPTION_KEY is not 16, 24 or 32")
 	}
 
 	o2c := &oauth2.Config{
-		ClientID:     cfg.ClientID,
-		ClientSecret: cfg.ClientSecret,
-		RedirectURL:  "https://" + cfg.DNSName + cfg.CallbackPath,
+		ClientID:     config.ClientID,
+		ClientSecret: config.ClientSecret,
+		RedirectURL:  "https://" + config.DNSName + config.CallbackPath,
 		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
 		Endpoint:     google.Endpoint,
 	}
 
-	store := sessions.NewCookieStore([]byte(cfg.SessionSecret), []byte(cfg.SessionEncrypttionKey))
-	store.Options.MaxAge = cfg.CookieMaxAge
+	store := sessions.NewCookieStore([]byte(config.SessionSecret), []byte(config.SessionEncrypttionKey))
+	store.Options.MaxAge = config.CookieMaxAge
 	store.Options.Secure = true
 
-	http.Handle(cfg.CallbackPath,
+	http.Handle(config.CallbackPath,
 		handleGoogleCallback(
-			cfg.StateToken, cfg.CookieName, cfg.EmailSuffix,
+			config.StateToken, config.CookieName, config.EmailSuffix,
 			o2c,
 			store,
 		),
 	)
 
-	proxy := httputil.NewSingleHostReverseProxy(cfg.ProxyURL)
-	http.Handle(cfg.HealthCheckPath, proxy)
+	proxy := httputil.NewSingleHostReverseProxy(config.ProxyURL)
+	http.Handle(config.HealthCheckPath, proxy)
 	http.Handle("/",
 		enforceXForwardedProto(
 			authorize(
-				cfg.CookieName, cfg.EmailSuffix, o2c.AuthCodeURL(cfg.StateToken, oauth2.AccessTypeOnline),
+				config.CookieName, config.EmailSuffix, o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline),
 				store,
 				proxy,
 			),
 		),
 	)
 
-	host := os.Getenv("HOST")
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "5000"
-	}
-
-	listen := host + ":" + port
+	listen := config.ServerHost + ":" + config.ServerPort
 	log.Println("Listening on", listen)
 
 	log.Fatal(http.ListenAndServe(listen, nil))
