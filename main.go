@@ -46,6 +46,9 @@ func authorize(name, suffix, redirect string, s sessions.Store, h http.Handler) 
 			return
 		}
 
+		session.Values["return_to"] = r.URL.RequestURI()
+		session.Save(r, w)
+
 		email, ok := session.Values["email"]
 		if !ok || email == nil || !strings.HasSuffix(email.(string), suffix) {
 			if email == nil {
@@ -150,8 +153,13 @@ func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sess
 			return
 		}
 
-		log.Printf("%s callback=successful\n", logPrefix)
-		http.Redirect(w, r, "/", http.StatusFound)
+		target, ok := session.Values["return_to"].(string)
+		if ok {
+			target = "/"
+		}
+
+		log.Printf("%s callback=successful target=%s\n", logPrefix, target)
+		http.Redirect(w, r, target, http.StatusFound)
 	})
 }
 
