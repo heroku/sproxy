@@ -134,8 +134,6 @@ func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sess
 			return
 		}
 
-		fmt.Printf("%+v\n", session)
-
 		session.Values["email"] = gp.Email
 		session.Values["GoogleID"] = gp.ID
 
@@ -149,7 +147,7 @@ func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sess
 
 		session.Values["OpenIDUser"] = strings.ToLower(parts[0])
 		target, ok := session.Values["return_to"].(string)
-		if ok {
+		if !ok {
 			target = "/"
 		}
 
