@@ -1,0 +1,6 @@
+language: go
+install:
+  - npm install -g snyk
+script:
+- snyk test
+- snyk monitor --org=sr-tools
