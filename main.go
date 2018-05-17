@@ -92,6 +92,26 @@ func enforceXForwardedProto(h http.Handler) http.Handler {
 	})
 }
 
+func handleAuthLogout(cfg config, s sessions.Store) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logPrefix := fmt.Sprintf("app=sproxy fn=logout method=%s path=%s\n",
+			r.Method, r.URL.Path)
+
+		session, err := s.Get(r, cfg.CookieName)
+		if err != nil || session == nil {
+			log.Printf("%s logout=failed error=%s\n", logPrefix, err.Error())
+			return
+		}
+
+		// clear out session values
+		session.Values = map[interface{}]interface{}{}
+		session.Save(r, w)
+
+		log.Printf("%s logout=successful\n", logPrefix)
+		http.Redirect(w, r, "/", http.StatusFound)
+	})
+}
+
 // Set the OpenIDUser and other session values based on the data from Google
 func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sessions.Store) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -198,6 +218,9 @@ func main() {
 			),
 		),
 	)
+
+	http.Handle("/auth/logout", handleAuthLogout(cfg, store))
+	http.Handle("/logout", handleAuthLogout(cfg, store))
 
 	host := os.Getenv("HOST")
 
