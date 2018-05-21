@@ -29,10 +29,9 @@ type configuration struct {
 	HealthCheckPath       string   `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
 	EmailSuffix           string   `env:"EMAIL_SUFFIX,default=@heroku.com"`                         // Required email suffix. Emails w/o this suffix will not be let in
 	StateToken            string   `env:"STATE_TOKEN,required"`                                     // Token used when communicating with Google Oauth2 provider
-  ServerHost            string   `env:"HOST"`                                                     // Host
+	ServerHost            string   `env:"HOST"`                                                     // Host
 	ServerPort            uint16   `env:"PORT,default=5000"`                                        // Port
 }
-
 
 var config configuration
 
@@ -60,9 +59,9 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 			return
 		}
 
-    redirect := o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline)
+		redirect := o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline)
 
-    session.Values["return_to"] = r.URL.RequestURI()
+		session.Values["return_to"] = r.URL.RequestURI()
 		session.Save(r, w)
 
 		email, ok := session.Values["email"]
@@ -117,7 +116,7 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 		logPrefix := fmt.Sprintf("app=sproxy fn=callback method=%s path=%s\n",
 			r.Method, r.URL.Path)
 
-      o2c := newOauth2Config()
+		o2c := newOauth2Config()
 
 		if v := r.FormValue("state"); v != config.StateToken {
 			log.Printf("%s callback=failed error=%s\n", logPrefix, fmt.Sprintf("Bad state token: %s", v))
@@ -164,7 +163,7 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 		}
 
 		session.Values["OpenIDUser"] = strings.ToLower(parts[0])
-    target, ok := session.Values["return_to"].(string)
+		target, ok := session.Values["return_to"].(string)
 		if !ok {
 			target = "/"
 		}
@@ -211,22 +210,22 @@ func main() {
 		log.Fatal("Length of SESSION_ENCRYPTION_KEY is not 16, 24 or 32")
 	}
 
-  store := sessions.NewCookieStore([]byte(config.SessionSecret), []byte(config.SessionEncrypttionKey))
+	store := sessions.NewCookieStore([]byte(config.SessionSecret), []byte(config.SessionEncrypttionKey))
 	store.Options.MaxAge = config.CookieMaxAge
 	store.Options.Secure = true
 
 	proxy := httputil.NewSingleHostReverseProxy(config.ProxyURL)
 
-  // Handle Google Callback
+	// Handle Google Callback
 	http.Handle(config.CallbackPath, handleGoogleCallback(store))
 
-  // Health Check
+	// Health Check
 	http.Handle(config.HealthCheckPath, proxy)
 
 	// Base HTTP Request handler
 	http.Handle("/", enforceXForwardedProto(authorize(store, proxy)))
 
-  http.Handle("/auth/logout", handleAuthLogout(store))
+	http.Handle("/auth/logout", handleAuthLogout(store))
 	http.Handle("/logout", handleAuthLogout(store))
 
 	listen := host + ":" + port
