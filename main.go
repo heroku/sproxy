@@ -16,7 +16,7 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-type config struct {
+type configuration struct {
 	ClientID              string   `env:"CLIENT_ID,required"`                                       // Google Client ID
 	ClientSecret          string   `env:"CLIENT_SECRET,required"`                                   // Google Client Secret
 	SessionSecret         string   `env:"SESSION_SECRET,required"`                                  // Random session auth key
@@ -29,25 +29,44 @@ type config struct {
 	HealthCheckPath       string   `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
 	EmailSuffix           string   `env:"EMAIL_SUFFIX,default=@heroku.com"`                         // Required email suffix. Emails w/o this suffix will not be let in
 	StateToken            string   `env:"STATE_TOKEN,required"`                                     // Token used when communicating with Google Oauth2 provider
+  ServerHost            string   `env:"HOST"`                                                     // Host
+	ServerPort            uint16   `env:"PORT,default=5000"`                                        // Port
+}
+
+
+var config configuration
+
+func newOauth2Config() *oauth2.Config {
+	return &oauth2.Config{
+		ClientID:     config.ClientID,
+		ClientSecret: config.ClientSecret,
+		Scopes:       oauthScopes,
+		Endpoint:     google.Endpoint,
+	}
 }
 
 // Authorize the user based on the email stored in the named session and matching the suffix. If the email doesn't exist
 // in the session or if the 'OpenIDUser' isn't set in the session, then redirect, otherwise set the X-Openid-User
 // header to what was stored in the session.
-func authorize(name, suffix, redirect string, s sessions.Store, h http.Handler) http.Handler {
+func authorize(s sessions.Store, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logPrefix := fmt.Sprintf("app=sproxy fn=authorize method=%s path=%s\n",
 			r.Method, r.URL.Path)
 
-		session, err := s.Get(r, name)
+		session, err := s.Get(r, config.CookieName)
 		if err != nil {
 			log.Printf("%s auth=failed error=%q\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
+    redirect := o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline)
+
+    session.Values["return_to"] = r.URL.RequestURI()
+		session.Save(r, w)
+
 		email, ok := session.Values["email"]
-		if !ok || email == nil || !strings.HasSuffix(email.(string), suffix) {
+		if !ok || email == nil || !strings.HasSuffix(email.(string), config.EmailSuffix) {
 			if email == nil {
 				email = ""
 			}
@@ -93,12 +112,14 @@ func enforceXForwardedProto(h http.Handler) http.Handler {
 }
 
 // Set the OpenIDUser and other session values based on the data from Google
-func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sessions.Store) http.Handler {
+func handleGoogleCallback(s sessions.Store) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logPrefix := fmt.Sprintf("app=sproxy fn=callback method=%s path=%s\n",
 			r.Method, r.URL.Path)
 
-		if v := r.FormValue("state"); v != token {
+      o2c := newOauth2Config()
+
+		if v := r.FormValue("state"); v != config.StateToken {
 			log.Printf("%s callback=failed error=%s\n", logPrefix, fmt.Sprintf("Bad state token: %s", v))
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
@@ -117,14 +138,14 @@ func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sess
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if gp.Email == "" || !strings.HasSuffix(gp.Email, suffix) {
+		if gp.Email == "" || !strings.HasSuffix(gp.Email, config.EmailSuffix) {
 			err := fmt.Errorf("Invalid Google Profile Email: %q", gp.Email)
 			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
 
-		session, err := s.Get(r, name)
+		session, err := s.Get(r, config.CookieName)
 		if err != nil {
 			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -143,6 +164,10 @@ func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sess
 		}
 
 		session.Values["OpenIDUser"] = strings.ToLower(parts[0])
+    target, ok := session.Values["return_to"].(string)
+		if !ok {
+			target = "/"
+		}
 
 		if err := session.Save(r, w); err != nil {
 			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
@@ -151,60 +176,58 @@ func handleGoogleCallback(token, name, suffix string, o2c *oauth2.Config, s sess
 		}
 
 		log.Printf("%s callback=successful\n", logPrefix)
+		http.Redirect(w, r, target, http.StatusFound)
+	})
+}
+
+func handleAuthLogout(s sessions.Store) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logPrefix := fmt.Sprintf("app=sproxy fn=logout method=%s path=%s\n",
+			r.Method, r.URL.Path)
+
+		session, err := s.Get(r, config.CookieName)
+		if err != nil || session == nil {
+			log.Printf("%s logout=failed error=%s\n", logPrefix, err.Error())
+			return
+		}
+
+		// clear out session values
+		session.Values = map[interface{}]interface{}{}
+		session.Save(r, w)
+
+		log.Printf("%s logout=successful\n", logPrefix)
 		http.Redirect(w, r, "/", http.StatusFound)
 	})
 }
 
 func main() {
-	var cfg config
-	if err := envdecode.Decode(&cfg); err != nil {
+	if err := envdecode.Decode(&config); err != nil {
 		log.Fatal(err)
 	}
 
-	switch len(cfg.SessionEncrypttionKey) {
+	switch len(config.SessionEncrypttionKey) {
 	case 16, 24, 32:
 	default:
 		log.Fatal("Length of SESSION_ENCRYPTION_KEY is not 16, 24 or 32")
 	}
 
-	o2c := &oauth2.Config{
-		ClientID:     cfg.ClientID,
-		ClientSecret: cfg.ClientSecret,
-		RedirectURL:  "https://" + cfg.DNSName + cfg.CallbackPath,
-		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
-		Endpoint:     google.Endpoint,
-	}
-
-	store := sessions.NewCookieStore([]byte(cfg.SessionSecret), []byte(cfg.SessionEncrypttionKey))
-	store.Options.MaxAge = cfg.CookieMaxAge
+  store := sessions.NewCookieStore([]byte(config.SessionSecret), []byte(config.SessionEncrypttionKey))
+	store.Options.MaxAge = config.CookieMaxAge
 	store.Options.Secure = true
 
-	http.Handle(cfg.CallbackPath,
-		handleGoogleCallback(
-			cfg.StateToken, cfg.CookieName, cfg.EmailSuffix,
-			o2c,
-			store,
-		),
-	)
+	proxy := httputil.NewSingleHostReverseProxy(config.ProxyURL)
 
-	proxy := httputil.NewSingleHostReverseProxy(cfg.ProxyURL)
-	http.Handle(cfg.HealthCheckPath, proxy)
-	http.Handle("/",
-		enforceXForwardedProto(
-			authorize(
-				cfg.CookieName, cfg.EmailSuffix, o2c.AuthCodeURL(cfg.StateToken, oauth2.AccessTypeOnline),
-				store,
-				proxy,
-			),
-		),
-	)
+  // Handle Google Callback
+	http.Handle(config.CallbackPath, handleGoogleCallback(store))
 
-	host := os.Getenv("HOST")
+  // Health Check
+	http.Handle(config.HealthCheckPath, proxy)
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "5000"
-	}
+	// Base HTTP Request handler
+	http.Handle("/", enforceXForwardedProto(authorize(store, proxy)))
+
+  http.Handle("/auth/logout", handleAuthLogout(store))
+	http.Handle("/logout", handleAuthLogout(store))
 
 	listen := host + ":" + port
 	log.Println("Listening on", listen)
