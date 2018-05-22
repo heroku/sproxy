@@ -194,10 +194,11 @@ func handleAuthLogout(s sessions.Store) http.Handler {
 		// clear out session values
 		//session.Values = map[interface{}]interface{}{}
 		session.Values[config.CookieMaxAge] = -1
+		session.AddFlash("Hello, flash messages world!")
 		session.Save(r, w)
 
 		log.Printf("%s logout=successful\n", logPrefix)
-		http.Redirect(w, r, "/", http.StatusFound)
+		//http.Redirect(w, r, "/", http.StatusFound)
 	})
 }
 
