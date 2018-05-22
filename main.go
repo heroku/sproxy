@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/gorilla/sessions"
@@ -29,8 +28,6 @@ type configuration struct {
 	HealthCheckPath       string   `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
 	EmailSuffix           string   `env:"EMAIL_SUFFIX,default=@heroku.com"`                         // Required email suffix. Emails w/o this suffix will not be let in
 	StateToken            string   `env:"STATE_TOKEN,required"`                                     // Token used when communicating with Google Oauth2 provider
-	ServerHost            string   `env:"HOST"`                                                     // Host
-	ServerPort            uint16   `env:"PORT,default=5000"`                                        // Port
 }
 
 var config configuration
@@ -39,7 +36,7 @@ func newOauth2Config() *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     config.ClientID,
 		ClientSecret: config.ClientSecret,
-		Scopes:       oauthScopes,
+		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
 		Endpoint:     google.Endpoint,
 	}
 }
@@ -227,6 +224,13 @@ func main() {
 
 	http.Handle("/auth/logout", handleAuthLogout(store))
 	http.Handle("/logout", handleAuthLogout(store))
+
+  host := os.Getenv("HOST")
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "5000"
+	}
 
 	listen := host + ":" + port
 	log.Println("Listening on", listen)
