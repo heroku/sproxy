@@ -194,7 +194,7 @@ func handleAuthLogout(s sessions.Store) http.Handler {
 
 		// clear out session values
 		//session.Values = map[interface{}]interface{}{}
-		store.Options.MaxAge = -1
+		//store.Options.MaxAge = -1
 		session.Save(r, w)
 
 		log.Printf("%s logout=successful\n", logPrefix)
