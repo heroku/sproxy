@@ -180,28 +180,6 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 	})
 }
 
-func handleAuthLogout(s sessions.Store) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logPrefix := fmt.Sprintf("app=sproxy fn=logout method=%s path=%s\n",
-			r.Method, r.URL.Path)
-
-		config.CookieMaxAge = -1
-		session, err := s.Get(r, config.CookieName)
-		if err != nil || session == nil {
-			log.Printf("%s logout=failed error=%s\n", logPrefix, err.Error())
-			return
-		}
-
-		// clear out session values
-		//session.Values = map[interface{}]interface{}{}
-		//store.Options.MaxAge = -1
-		session.Save(r, w)
-
-		log.Printf("%s logout=successful\n", logPrefix)
-		http.Redirect(w, r, "/", http.StatusFound)
-	})
-}
-
 func main() {
 	if err := envdecode.Decode(&config); err != nil {
 		log.Fatal(err)
@@ -227,9 +205,6 @@ func main() {
 
 	// Base HTTP Request handler
 	http.Handle("/", enforceXForwardedProto(authorize(store, proxy)))
-
-	http.Handle("/auth/logout", handleAuthLogout(store))
-	http.Handle("/logout", handleAuthLogout(store))
 
 	host := os.Getenv("HOST")
 
