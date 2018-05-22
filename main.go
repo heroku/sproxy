@@ -8,6 +8,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+  "os"
 
 	"github.com/gorilla/sessions"
 	"github.com/joeshaw/envdecode"
@@ -40,6 +41,8 @@ func newOauth2Config() *oauth2.Config {
 		Endpoint:     google.Endpoint,
 	}
 }
+
+o2c := newOauth2Config()
 
 // Authorize the user based on the email stored in the named session and matching the suffix. If the email doesn't exist
 // in the session or if the 'OpenIDUser' isn't set in the session, then redirect, otherwise set the X-Openid-User
@@ -113,7 +116,7 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 		logPrefix := fmt.Sprintf("app=sproxy fn=callback method=%s path=%s\n",
 			r.Method, r.URL.Path)
 
-		o2c := newOauth2Config()
+		//o2c := newOauth2Config()
 
 		if v := r.FormValue("state"); v != config.StateToken {
 			log.Printf("%s callback=failed error=%s\n", logPrefix, fmt.Sprintf("Bad state token: %s", v))
