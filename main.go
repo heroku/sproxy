@@ -185,6 +185,7 @@ func handleAuthLogout(s sessions.Store) http.Handler {
 		logPrefix := fmt.Sprintf("app=sproxy fn=logout method=%s path=%s\n",
 			r.Method, r.URL.Path)
 
+		config.CookieMaxAge = -1
 		session, err := s.Get(r, config.CookieName)
 		if err != nil || session == nil {
 			log.Printf("%s logout=failed error=%s\n", logPrefix, err.Error())
@@ -193,12 +194,11 @@ func handleAuthLogout(s sessions.Store) http.Handler {
 
 		// clear out session values
 		//session.Values = map[interface{}]interface{}{}
-		session.Values[config.CookieMaxAge] = -1
-		session.AddFlash("Hello, flash messages world!")
+		store.Options.MaxAge = -1
 		session.Save(r, w)
 
 		log.Printf("%s logout=successful\n", logPrefix)
-		//http.Redirect(w, r, "/", http.StatusFound)
+		http.Redirect(w, r, "/", http.StatusFound)
 	})
 }
 
