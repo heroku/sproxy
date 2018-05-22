@@ -37,7 +37,7 @@ func newOauth2Config() *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     config.ClientID,
 		ClientSecret: config.ClientSecret,
-		RedirectURL:  "https://" + cfg.DNSName + cfg.CallbackPath,
+		RedirectURL:  "https://" + config.DNSName + config.CallbackPath,
 		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
 		Endpoint:     google.Endpoint,
 	}
