@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
-  "os"
 
 	"github.com/gorilla/sessions"
 	"github.com/joeshaw/envdecode"
@@ -42,8 +42,6 @@ func newOauth2Config() *oauth2.Config {
 	}
 }
 
-o2c := newOauth2Config()
-
 // Authorize the user based on the email stored in the named session and matching the suffix. If the email doesn't exist
 // in the session or if the 'OpenIDUser' isn't set in the session, then redirect, otherwise set the X-Openid-User
 // header to what was stored in the session.
@@ -58,6 +56,8 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+
+		o2c := newOauth2Config()
 
 		redirect := o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline)
 
@@ -116,7 +116,7 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 		logPrefix := fmt.Sprintf("app=sproxy fn=callback method=%s path=%s\n",
 			r.Method, r.URL.Path)
 
-		//o2c := newOauth2Config()
+		o2c := newOauth2Config()
 
 		if v := r.FormValue("state"); v != config.StateToken {
 			log.Printf("%s callback=failed error=%s\n", logPrefix, fmt.Sprintf("Bad state token: %s", v))
@@ -228,7 +228,7 @@ func main() {
 	http.Handle("/auth/logout", handleAuthLogout(store))
 	http.Handle("/logout", handleAuthLogout(store))
 
-  host := os.Getenv("HOST")
+	host := os.Getenv("HOST")
 
 	port := os.Getenv("PORT")
 	if port == "" {
