@@ -192,8 +192,11 @@ func handleAuthLogout(s sessions.Store) http.Handler {
 		}
 
 		// clear out session values
-		session.Values = map[interface{}]interface{}{}
-		session.Save(r, w)
+		//session.Values = map[interface{}]interface{}{}
+		//session.Save(r, w)
+
+		o2c := newOauth2Config()
+		o2c.DeleteUserCookie(w, r)
 
 		log.Printf("%s logout=successful\n", logPrefix)
 		http.Redirect(w, r, "/", http.StatusFound)
