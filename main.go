@@ -21,7 +21,6 @@ type configuration struct {
 	ClientSecret          string   `env:"CLIENT_SECRET,required"`                                   // Google Client Secret
 	SessionSecret         string   `env:"SESSION_SECRET,required"`                                  // Random session auth key
 	SessionEncrypttionKey string   `env:"SESSION_ENCRYPTION_KEY,required"`                          // Random session encryption key
-	DNSName               string   `env:"DNS_NAME,required"`                                        // Public facing DNS Hostname
 	CookieMaxAge          int      `env:"COOKIE_MAX_AGE,default=1440"`                              // Cookie MaxAge, Defaults to 1 day
 	CookieName            string   `env:"COOKIE_NAME,default=sproxy_session"`                       // The name of the cookie
 	ProxyURL              *url.URL `env:"PROXY_URL,default=http://localhost:8000/"`                 // URL to Proxy to
