@@ -21,7 +21,6 @@ type configuration struct {
 	ClientSecret          string   `env:"CLIENT_SECRET,required"`                                   // Google Client Secret
 	SessionSecret         string   `env:"SESSION_SECRET,required"`                                  // Random session auth key
 	SessionEncrypttionKey string   `env:"SESSION_ENCRYPTION_KEY,required"`                          // Random session encryption key
-	DNSName               string   `env:"DNS_NAME,required"`                                        // Public facing DNS Hostname
 	CookieMaxAge          int      `env:"COOKIE_MAX_AGE,default=1440"`                              // Cookie MaxAge, Defaults to 1 day
 	CookieName            string   `env:"COOKIE_NAME,default=sproxy_session"`                       // The name of the cookie
 	ProxyURL              *url.URL `env:"PROXY_URL,default=http://localhost:8000/"`                 // URL to Proxy to
@@ -33,11 +32,11 @@ type configuration struct {
 
 var config configuration
 
-func newOauth2Config() *oauth2.Config {
+func newOauth2Config(host string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     config.ClientID,
 		ClientSecret: config.ClientSecret,
-		RedirectURL:  "https://" + config.DNSName + config.CallbackPath,
+		RedirectURL:  "https://" + host + config.CallbackPath,
 		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
 		Endpoint:     google.Endpoint,
 	}
@@ -58,7 +57,7 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 			return
 		}
 
-		o2c := newOauth2Config()
+		o2c := newOauth2Config(r.Host)
 
 		redirect := o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline)
 
@@ -117,7 +116,7 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 		logPrefix := fmt.Sprintf("app=sproxy fn=callback method=%s path=%s\n",
 			r.Method, r.URL.Path)
 
-		o2c := newOauth2Config()
+		o2c := newOauth2Config(r.Host)
 
 		if v := r.FormValue("state"); v != config.StateToken {
 			log.Printf("%s callback=failed error=%s\n", logPrefix, fmt.Sprintf("Bad state token: %s", v))
