@@ -58,8 +58,9 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 		}
 
 		o2c := newOauth2Config(r.Host)
+		hostedDomain := oauth2.SetAuthURLParam("hd", "heroku.com")
 
-		redirect := o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline)
+		redirect := o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline, hostedDomain)
 
 		session.Values["return_to"] = r.URL.RequestURI()
 		session.Save(r, w)
