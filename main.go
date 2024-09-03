@@ -94,7 +94,7 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 }
 
 func suffixMismatch(email, emailSuffixString string) bool {
-	emailSuffixes := strings.Split(config.EmailSuffix, ",")
+	emailSuffixes := strings.Split(emailSuffixString, ",")
 
 	for _, emailSuffix := range emailSuffixes {
 		if strings.HasSuffix(email, emailSuffix) {
