@@ -153,7 +153,7 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if gp.Email == "" || !strings.HasSuffix(gp.Email, config.EmailSuffix) {
+		if gp.Email == "" || suffixMismatch(gp.Email, config.EmailSuffix) {
 			err := fmt.Errorf("Invalid Google Profile Email: %q", gp.Email)
 			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusForbidden)
