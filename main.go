@@ -26,7 +26,7 @@ type configuration struct {
 	ProxyURL              *url.URL `env:"PROXY_URL,default=http://localhost:8000/"`                 // URL to Proxy to
 	CallbackPath          string   `env:"CALLBACK_PATH,default=/auth/callback/google"`              // Callback URL
 	HealthCheckPath       string   `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
-	EmailSuffix           string   `env:"EMAIL_SUFFIX,default=@heroku.com"`                         // Required email suffix. Emails w/o this suffix will not be let in
+	EmailSuffix           string   `env:"EMAIL_SUFFIX,default=@heroku.com,@salesforce.com"`         // Required email suffix. Emails w/o this suffix will not be let in
 	StateToken            string   `env:"STATE_TOKEN,required"`                                     // Token used when communicating with Google Oauth2 provider
 }
 
@@ -65,7 +65,7 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 		session.Save(r, w)
 
 		email, ok := session.Values["email"]
-		if !ok || email == nil || !strings.HasSuffix(email.(string), config.EmailSuffix) {
+		if !ok || email == nil || suffixMismatch(email.(string), config.EmailSuffix) {
 			if email == nil {
 				email = ""
 			}
@@ -84,9 +84,25 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 			return
 		}
 
+		email, ok = session.Values["email"]
+
+		log.Printf("%s auth=success user=%s email=%s redirect=%s\n", logPrefix, openIDUser.(string), email, redirect)
+
 		r.Header.Set("X-Openid-User", openIDUser.(string))
 		h.ServeHTTP(w, r)
 	})
+}
+
+func suffixMismatch(email, emailSuffixString string) bool {
+	emailSuffixes := strings.Split(emailSuffixString, ",")
+
+	for _, emailSuffix := range emailSuffixes {
+		if strings.HasSuffix(email, emailSuffix) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // enforceXForwardedProto header is set before processing the handler.
@@ -137,7 +153,7 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if gp.Email == "" || !strings.HasSuffix(gp.Email, config.EmailSuffix) {
+		if gp.Email == "" || suffixMismatch(gp.Email, config.EmailSuffix) {
 			err := fmt.Errorf("Invalid Google Profile Email: %q", gp.Email)
 			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusForbidden)
