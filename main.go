@@ -65,7 +65,7 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 		session.Save(r, w)
 
 		email, ok := session.Values["email"]
-		if !ok || email == nil || !strings.HasSuffix(email.(string), config.EmailSuffix) {
+		if !ok || email == nil || suffixMismatch(email.(string), config.EmailSuffix) {
 			if email == nil {
 				email = ""
 			}
@@ -84,9 +84,25 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 			return
 		}
 
+		email, ok = session.Values["email"]
+
+		log.Printf("%s auth=success user=%s email=%s redirect=%s\n", logPrefix, openIDUser.(string), email, redirect)
+
 		r.Header.Set("X-Openid-User", openIDUser.(string))
 		h.ServeHTTP(w, r)
 	})
+}
+
+func suffixMismatch(email, emailSuffixString string) bool {
+	emailSuffixes := strings.Split(config.EmailSuffix, ",")
+
+	for _, emailSuffix := range emailSuffixes {
+		if strings.HasSuffix(email, emailSuffix) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // enforceXForwardedProto header is set before processing the handler.
