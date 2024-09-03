@@ -98,11 +98,11 @@ func suffixMismatch(email, emailSuffixString string) bool {
 
 	for _, emailSuffix := range emailSuffixes {
 		if strings.HasSuffix(email, emailSuffix) {
-			return true
+			return false
 		}
 	}
 
-	return false
+	return true
 }
 
 // enforceXForwardedProto header is set before processing the handler.
