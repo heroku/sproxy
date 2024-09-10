@@ -93,7 +93,7 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 	})
 }
 
-func suffixMismatch(email, emailSuffixString string) bool {
+func suffixMismatch(email string, emailSuffixString string) bool {
 	emailSuffixes := strings.Split(emailSuffixString, ";")
 
 	for _, emailSuffix := range emailSuffixes {
