@@ -26,7 +26,7 @@ type configuration struct {
 	ProxyURL              *url.URL `env:"PROXY_URL,default=http://localhost:8000/"`                 // URL to Proxy to
 	CallbackPath          string   `env:"CALLBACK_PATH,default=/auth/callback/google"`              // Callback URL
 	HealthCheckPath       string   `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
-	EmailSuffix           string   `env:"EMAIL_SUFFIX,default=@heroku.com,@salesforce.com"`         // Required email suffix. Emails w/o this suffix will not be let in
+	EmailSuffix           string   `env:"EMAIL_SUFFIX,default=@heroku.com;@salesforce.com"`         // Required email suffix. Emails w/o this suffix will not be let in
 	StateToken            string   `env:"STATE_TOKEN,required"`                                     // Token used when communicating with Google Oauth2 provider
 }
 
@@ -94,7 +94,7 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 }
 
 func suffixMismatch(email, emailSuffixString string) bool {
-	emailSuffixes := strings.Split(emailSuffixString, ",")
+	emailSuffixes := strings.Split(emailSuffixString, ";")
 
 	for _, emailSuffix := range emailSuffixes {
 		if strings.HasSuffix(email, emailSuffix) {
