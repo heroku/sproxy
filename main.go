@@ -59,7 +59,10 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 
 		o2c := newOauth2Config(r.Host)
 
-		redirect := o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline)
+		// https://developers.google.com/identity/openid-connect/openid-connect#hd-param
+		hd := strings.TrimPrefix(config.EmailSuffixes[len(config.EmailSuffixes)-1], "@")
+
+		redirect := o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline, oauth2.SetAuthURLParam("hd", hd))
 
 		session.Values["return_to"] = r.URL.RequestURI()
 		session.Save(r, w)
