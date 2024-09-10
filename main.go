@@ -26,7 +26,7 @@ type configuration struct {
 	ProxyURL              *url.URL `env:"PROXY_URL,default=http://localhost:8000/"`                 // URL to Proxy to
 	CallbackPath          string   `env:"CALLBACK_PATH,default=/auth/callback/google"`              // Callback URL
 	HealthCheckPath       string   `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
-	EmailSuffix           string   `env:"EMAIL_SUFFIX,default=@heroku.com;@salesforce.com"`         // Required email suffix. Emails w/o this suffix will not be let in
+	EmailSuffixes         []string `env:"EMAIL_SUFFIX,default=@heroku.com;@salesforce.com"`         // Required email suffix. Emails w/o this suffix will not be let in
 	StateToken            string   `env:"STATE_TOKEN,required"`                                     // Token used when communicating with Google Oauth2 provider
 }
 
@@ -65,7 +65,7 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 		session.Save(r, w)
 
 		email, ok := session.Values["email"]
-		if !ok || email == nil || suffixMismatch(email.(string), config.EmailSuffix) {
+		if !ok || email == nil || suffixMismatch(email.(string), config.EmailSuffixes) {
 			if email == nil {
 				email = ""
 			}
@@ -93,9 +93,7 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 	})
 }
 
-func suffixMismatch(email string, emailSuffixString string) bool {
-	emailSuffixes := strings.Split(emailSuffixString, ";")
-
+func suffixMismatch(email string, emailSuffixes []string) bool {
 	for _, emailSuffix := range emailSuffixes {
 		if strings.HasSuffix(email, emailSuffix) {
 			return false
@@ -153,7 +151,7 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if gp.Email == "" || suffixMismatch(gp.Email, config.EmailSuffix) {
+		if gp.Email == "" || suffixMismatch(gp.Email, config.EmailSuffixes) {
 			err := fmt.Errorf("Invalid Google Profile Email: %q", gp.Email)
 			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusForbidden)
