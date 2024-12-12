@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/gob"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,12 +10,18 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gorilla/sessions"
 	"github.com/joeshaw/envdecode"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
+
+func init() {
+	// Register time.Time so securecookie (via gob) can encode and decode it
+	gob.Register(time.Time{})
+}
 
 type configuration struct {
 	ClientID              string   `env:"CLIENT_ID,required"`                                       // Google Client ID
@@ -28,6 +35,7 @@ type configuration struct {
 	HealthCheckPath       string   `env:"HEALTH_CHECK_PATH,default=/en-US/static/html/credit.html"` // Health Check path in splunk, this path is proxied w/o auth. The default is a static file served by the splunk web server
 	EmailSuffixes         []string `env:"EMAIL_SUFFIX,default=@heroku.com;@salesforce.com"`         // Required email suffix. Emails w/o this suffix will not be let in
 	StateToken            string   `env:"STATE_TOKEN,required"`                                     // Token used when communicating with Google Oauth2 provider
+	SessionValidTime      int      `env:"SESSION_VALID_TIME"`                                       // session valid time in minutes
 }
 
 var config configuration
@@ -56,7 +64,6 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
 		o2c := newOauth2Config(r.Host)
 
 		// https://developers.google.com/identity/openid-connect/openid-connect#hd-param
@@ -66,6 +73,19 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 
 		session.Values["return_to"] = r.URL.RequestURI()
 		session.Save(r, w)
+
+		session_valid_until, ok := session.Values["valid_until"]
+		if !ok {
+			log.Printf("%s auth=failed msg='session expired: no valid_until field' redirect=%s\n", logPrefix, redirect)
+			http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
+			return
+		}
+		validUntilTime, ok := session_valid_until.(time.Time)
+		if !ok || time.Now().After(validUntilTime) {
+			log.Printf("%s auth=failed msg='session expired' session_valid_until=%v redirect=%s\n", logPrefix, validUntilTime, redirect)
+			http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
+			return
+		}
 
 		email, ok := session.Values["email"]
 		if !ok || email == nil || suffixMismatch(email.(string), config.EmailSuffixes) {
@@ -170,6 +190,8 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 
 		session.Values["email"] = gp.Email
 		session.Values["GoogleID"] = gp.ID
+		SessionValidTimeInMin := time.Duration(config.SessionValidTime)
+		session.Values["valid_until"] = time.Now().Add(SessionValidTimeInMin * time.Minute)
 
 		parts := strings.SplitN(gp.Email, "@", 2)
 		if len(parts) < 2 {
