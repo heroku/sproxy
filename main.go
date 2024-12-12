@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/gob"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +17,11 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
+
+func init() {
+	// Register time.Time so securecookie (via gob) can encode and decode it
+	gob.Register(time.Time{})
+}
 
 type configuration struct {
 	ClientID              string   `env:"CLIENT_ID,required"`                                       // Google Client ID
@@ -64,17 +70,28 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 
 		redirect := o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline)
 		log.Printf("redirect URL %v", redirect)
+		log.Printf("this is the time value stored %v", session.Values["valid_until"])
 
-		session.Values["return_to"] = r.URL.RequestURI()
+		//session.Values["return_to"] = r.URL.RequestURI()
+		session.Values["return_to"] = "https://google.com"
 		session.Save(r, w)
 
 		session_valid_until, ok := session.Values["valid_until"]
-		log.Printf("********* session valid time %v", session_valid_until)
-		if !ok || time.Now().After(session_valid_until.(time.Time)) {
+		if !ok {
+			log.Printf("Session expired: no valid_until field\n")
+			http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
+			return
+		}
+		validUntilTime, ok := session_valid_until.(time.Time)
+		//log.Printf("********* session valid time %v", session_valid_until)
+		if !ok || time.Now().After(validUntilTime) {
 			log.Printf("%s auth=failed msg='session expired' redirect=%s\n", logPrefix, redirect)
 			http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
 			return
 		}
+
+		// Proceed if session is valid
+		log.Println("Session is valid")
 
 		email, ok := session.Values["email"]
 		if !ok || email == nil || suffixMismatch(email.(string), config.EmailSuffix) {
@@ -141,6 +158,7 @@ func enforceXForwardedProto(h http.Handler) http.Handler {
 // Set the OpenIDUser and other session values based on the data from Google
 func handleGoogleCallback(s sessions.Store) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("############## this statement inside handle google call back function")
 		logPrefix := fmt.Sprintf("app=sproxy fn=callback method=%s path=%s\n",
 			r.Method, r.URL.Path)
 
@@ -182,7 +200,7 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 
 		session.Values["email"] = gp.Email
 		session.Values["GoogleID"] = gp.ID
-		session.Values["valid_until"] = time.Now().Add(time.Minute)
+		session.Values["valid_until"] = time.Now().Add(1 * time.Minute)
 
 		parts := strings.SplitN(gp.Email, "@", 2)
 		if len(parts) < 2 {
@@ -227,6 +245,7 @@ func main() {
 	proxy := httputil.NewSingleHostReverseProxy(config.ProxyURL)
 
 	// Handle Google Callback
+	log.Printf("############## this statement is before handle google call back function")
 	http.Handle(config.CallbackPath, handleGoogleCallback(store))
 
 	// Health Check
