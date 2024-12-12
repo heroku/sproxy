@@ -71,11 +71,8 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 		hd := strings.TrimPrefix(config.EmailSuffixes[len(config.EmailSuffixes)-1], "@")
 
 		redirect := o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline, oauth2.SetAuthURLParam("hd", hd))
-		log.Printf("redirect URL %v", redirect)
-		log.Printf("this is the time value stored %v", session.Values["valid_until"])
 
-		//session.Values["return_to"] = r.URL.RequestURI()
-		session.Values["return_to"] = "https://google.com"
+		session.Values["return_to"] = r.URL.RequestURI()
 		session.Save(r, w)
 
 		session_valid_until, ok := session.Values["valid_until"]
@@ -121,7 +118,6 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 }
 
 func suffixMismatch(email string, emailSuffixes []string) bool {
-
 	for _, emailSuffix := range emailSuffixes {
 		if strings.HasSuffix(email, emailSuffix) {
 			return false
