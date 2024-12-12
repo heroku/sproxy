@@ -38,7 +38,6 @@ type configuration struct {
 	SessionValidTime      int      `env:"SESSION_VALID_TIME"`                                       // session valid time in minutes
 }
 
-// seconds
 var config configuration
 
 func newOauth2Config(host string) *oauth2.Config {
@@ -77,7 +76,7 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 
 		session_valid_until, ok := session.Values["valid_until"]
 		if !ok {
-			log.Printf("Session expired: no valid_until field\n")
+			log.Printf("%s auth=failed msg='session expired: no valid_until field' redirect=%s\n", logPrefix, redirect)
 			http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
 			return
 		}
@@ -154,7 +153,6 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 		logPrefix := fmt.Sprintf("app=sproxy fn=callback method=%s path=%s\n",
 			r.Method, r.URL.Path)
 
-		log.Printf("request object %v", r.URL.RequestURI())
 		o2c := newOauth2Config(r.Host)
 
 		if v := r.FormValue("state"); v != config.StateToken {
@@ -255,5 +253,6 @@ func main() {
 
 	listen := host + ":" + port
 	log.Println("Listening on", listen)
+
 	log.Fatal(http.ListenAndServe(listen, nil))
 }
