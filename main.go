@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gorilla/sessions"
 	"github.com/joeshaw/envdecode"
@@ -30,13 +31,14 @@ type configuration struct {
 	StateToken            string   `env:"STATE_TOKEN,required"`                                     // Token used when communicating with Google Oauth2 provider
 }
 
+// seconds
 var config configuration
 
 func newOauth2Config(host string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     config.ClientID,
 		ClientSecret: config.ClientSecret,
-		RedirectURL:  "https://" + host + config.CallbackPath,
+		RedirectURL:  "http://" + host + config.CallbackPath,
 		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
 		Endpoint:     google.Endpoint,
 	}
@@ -47,6 +49,7 @@ func newOauth2Config(host string) *oauth2.Config {
 // header to what was stored in the session.
 func authorize(s sessions.Store, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Println("we are in authorize function")
 		logPrefix := fmt.Sprintf("app=sproxy fn=authorize method=%s path=%s\n",
 			r.Method, r.URL.Path)
 
@@ -56,13 +59,22 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
+		log.Printf("host value is %v", r.Host)
 		o2c := newOauth2Config(r.Host)
 
 		redirect := o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline)
+		log.Printf("redirect URL %v", redirect)
 
 		session.Values["return_to"] = r.URL.RequestURI()
 		session.Save(r, w)
+
+		session_valid_until, ok := session.Values["valid_until"]
+		log.Printf("********* session valid time %v", session_valid_until)
+		if !ok || time.Now().After(session_valid_until.(time.Time)) {
+			log.Printf("%s auth=failed msg='session expired' redirect=%s\n", logPrefix, redirect)
+			http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
+			return
+		}
 
 		email, ok := session.Values["email"]
 		if !ok || email == nil || suffixMismatch(email.(string), config.EmailSuffix) {
@@ -132,6 +144,7 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 		logPrefix := fmt.Sprintf("app=sproxy fn=callback method=%s path=%s\n",
 			r.Method, r.URL.Path)
 
+		log.Printf("request object %v", r.URL.RequestURI())
 		o2c := newOauth2Config(r.Host)
 
 		if v := r.FormValue("state"); v != config.StateToken {
@@ -154,7 +167,7 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 			return
 		}
 		if gp.Email == "" || suffixMismatch(gp.Email, config.EmailSuffix) {
-			err := fmt.Errorf("Invalid Google Profile Email: %q", gp.Email)
+			err := fmt.Errorf("##############  Invalid Google Profile Email: %q", gp.Email)
 			log.Printf("%s callback=failed error=%s\n", logPrefix, err.Error())
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
@@ -169,6 +182,7 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 
 		session.Values["email"] = gp.Email
 		session.Values["GoogleID"] = gp.ID
+		session.Values["valid_until"] = time.Now().Add(time.Minute)
 
 		parts := strings.SplitN(gp.Email, "@", 2)
 		if len(parts) < 2 {
@@ -219,17 +233,16 @@ func main() {
 	http.Handle(config.HealthCheckPath, proxy)
 
 	// Base HTTP Request handler
-	http.Handle("/", enforceXForwardedProto(authorize(store, proxy)))
+	http.Handle("/", (authorize(store, proxy)))
 
 	host := os.Getenv("HOST")
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "5000"
+		port = "8000"
 	}
 
 	listen := host + ":" + port
 	log.Println("Listening on", listen)
-
 	log.Fatal(http.ListenAndServe(listen, nil))
 }
