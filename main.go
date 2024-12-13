@@ -81,7 +81,7 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 			return
 		}
 		validUntilTime, ok := session_valid_until.(time.Time)
-		if !ok || time.Now().UTC().After(validUntilTime) {
+		if !ok || time.Now().After(validUntilTime) {
 			log.Printf("%s auth=failed msg='session expired' session_valid_until=%v redirect=%s\n", logPrefix, validUntilTime, redirect)
 			http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
 			return
@@ -190,7 +190,8 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 
 		session.Values["email"] = gp.Email
 		session.Values["GoogleID"] = gp.ID
-		session.Values["valid_until"] = time.Now().UTC().Add(10080 * time.Minute)
+		SessionValidTimeInMin := time.Duration(config.SessionValidTime)
+		session.Values["valid_until"] = time.Now().Add(SessionValidTimeInMin * time.Minute)
 
 		parts := strings.SplitN(gp.Email, "@", 2)
 		if len(parts) < 2 {
