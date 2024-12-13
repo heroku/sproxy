@@ -190,7 +190,8 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 
 		session.Values["email"] = gp.Email
 		session.Values["GoogleID"] = gp.ID
-		session.Values["valid_until"] = time.Now().UTC().Add(10080 * time.Minute)
+		SessionValidTimeInNS := time.Duration(config.SessionValidTime)
+		session.Values["valid_until"] = time.Now().UTC().Add(SessionValidTimeInNS * time.Minute)
 
 		parts := strings.SplitN(gp.Email, "@", 2)
 		if len(parts) < 2 {
