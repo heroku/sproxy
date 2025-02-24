@@ -10,8 +10,8 @@ github.com/gorilla/sessions v0.0.0-20170802141718-b61c93cb7f67 h1:VdH0BDsHNMeY3k
 github.com/gorilla/sessions v0.0.0-20170802141718-b61c93cb7f67/go.mod h1:+WVp8kdw6VhyKExm03PAMRn2ZxnPtm58pV0dBVPdhHE=
 github.com/joeshaw/envdecode v0.0.0-20170502020559-6326cbed175e h1:OjHamqOoW5L+YgnzK3JBoMCLLhximcwxDFvjLqXeeJ0=
 github.com/joeshaw/envdecode v0.0.0-20170502020559-6326cbed175e/go.mod h1:Q+alOFAXgW5SrcfMPt/G4B2oN+qEcQRJjkn/f4mKL04=
-github.com/pkg/errors v0.8.1-0.20170505043639-c605e284fe17 h1:+adyfd5YBtuLL2FbDEn0GitOinGeMH0levy3o62TMF0=
-github.com/pkg/errors v0.8.1-0.20170505043639-c605e284fe17/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
+github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
+github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 golang.org/x/net v0.0.0-20170809000501-1c05540f6879 h1:0rFa7EaCGdQPmZVbo9F7MNF65b8dyzS6EUnXjs9Cllk=
 golang.org/x/net v0.0.0-20170809000501-1c05540f6879/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
 golang.org/x/oauth2 v0.0.0-20170807180024-9a379c6b3e95 h1:RS+wSrhdVci7CsPwJaMN8exaP3UTuQU0qB34R/E/JD0=
