@@ -19,7 +19,7 @@ github.com/joeshaw/envdecode
 # github.com/pkg/errors v0.8.1-0.20170505043639-c605e284fe17
 ## explicit
 github.com/pkg/errors
-# golang.org/x/net v0.0.0-20170809000501-1c05540f6879
+# golang.org/x/net v0.38.0
 ## explicit
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
@@ -30,8 +30,6 @@ golang.org/x/oauth2/google
 golang.org/x/oauth2/internal
 golang.org/x/oauth2/jws
 golang.org/x/oauth2/jwt
-# golang.org/x/sync v0.3.0
-## explicit
 # google.golang.org/appengine v1.0.0
 ## explicit
 google.golang.org/appengine
