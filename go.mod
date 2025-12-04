@@ -6,7 +6,7 @@ require (
 	github.com/gorilla/sessions v0.0.0-20170802141718-b61c93cb7f67
 	github.com/joeshaw/envdecode v0.0.0-20170502020559-6326cbed175e
 	github.com/pkg/errors v0.8.1-0.20170505043639-c605e284fe17
-	golang.org/x/oauth2 v0.27.0
+	golang.org/x/oauth2 v0.33.0
 )
 
 require (
