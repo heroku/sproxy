@@ -25,4 +25,52 @@ See the Config struct for required and optional config vars and their defaults
 
 * visit "https://**the.host.domain**", do the oauth dance and then visit "https://**the.host.domain**/en-US/account/logout" and enter the default admin user/password so you can log into the UI and setup your users.
 
+# Testing
+
+## Running Tests Locally
+
+To run the test suite locally:
+
+```bash
+# Run all tests
+go test ./...
+
+# Run tests with verbose output
+go test -v ./...
+
+# Run tests with coverage
+go test -cover ./...
+
+# Run tests with coverage report
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+```
+
+## Test Coverage
+
+The test suite includes comprehensive tests for:
+
+- **Email suffix validation** - Tests that only allowed email domains are accepted
+- **HTTPS enforcement** - Tests that requests without `X-Forwarded-Proto: https` are redirected
+- **Authorization middleware** - Tests session validation, expiration, and header injection
+- **OAuth callback handling** - Tests state token validation and error handling
+- **Health check bypass** - Tests that health check endpoints bypass authentication
+- **Full authentication flow** - Tests complete end-to-end authentication and proxying
+
+All tests use safe test data:
+- Test email domains (`@example.com`, `@test.local`) - no internal domains
+- Generated test secrets - no real credentials
+- Mock backend servers - no external dependencies
+
+## CI/CD
+
+Tests run automatically on every push and pull request via GitHub Actions. The workflow:
+
+1. Sets up Go 1.24
+2. Verifies and downloads dependencies
+3. Runs the full test suite
+4. Generates coverage reports
+
+See `.github/workflows/test.yml` for the complete workflow configuration.
+
 FIXME: More info
