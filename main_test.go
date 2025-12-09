@@ -414,6 +414,92 @@ func TestHealthCheckBypass(t *testing.T) {
 	}
 }
 
+// TestAuthorizeExpiredTimestamp tests that expired timestamp errors redirect to OAuth
+func TestAuthorizeExpiredTimestamp(t *testing.T) {
+	tc := setupTestConfig()
+	setupTestEnvironment(tc)
+
+	// Create a test backend server
+	backendCalled := false
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		backendCalled = true
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("backend response"))
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	config.ProxyURL = backendURL
+
+	// Create a store with a very short MaxAge to simulate expired cookies
+	store := sessions.NewCookieStore([]byte(tc.sessionSecret), []byte(tc.sessionEncryptionKey))
+	store.MaxAge(1) // 1 second - very short (this also sets MaxAge on securecookie codecs)
+	store.Options.Secure = false // Allow insecure cookies in tests
+
+	// Create a proxy handler
+	proxy := httputil.NewSingleHostReverseProxy(config.ProxyURL)
+	handler := authorize(store, proxy)
+
+	// Create a request to setup a session
+	req1 := httptest.NewRequest("GET", "/test", nil)
+	req1.Header.Set("X-Forwarded-Proto", "https")
+	req1.Host = "test.example.com"
+
+	// Create and save a session
+	session, _ := store.Get(req1, config.CookieName)
+	session.Values["email"] = "testuser@example.com"
+	session.Values["OpenIDUser"] = "testuser"
+	session.Values["valid_until"] = time.Now().UTC().Add(30 * time.Minute)
+
+	// Save session to get cookie
+	w1 := httptest.NewRecorder()
+	session.Save(req1, w1)
+	cookie := w1.Header().Get("Set-Cookie")
+
+	if cookie == "" {
+		t.Fatal("No cookie set after saving session")
+	}
+
+	// Wait for the cookie to expire (MaxAge is 1 second)
+	time.Sleep(2 * time.Second)
+
+	// Create a new request with the expired cookie
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("Cookie", cookie)
+	req.Host = "test.example.com"
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	// Should redirect to OAuth instead of returning 400
+	if w.Code != http.StatusTemporaryRedirect {
+		t.Errorf("Expected redirect (307), got %d", w.Code)
+	}
+
+	location := w.Header().Get("Location")
+	if location == "" {
+		t.Error("Expected Location header in redirect")
+	}
+
+	// Should redirect to Google OAuth
+	if !strings.Contains(location, "accounts.google.com") {
+		t.Errorf("Expected redirect to Google OAuth, got %s", location)
+	}
+
+	// Backend should not be called
+	if backendCalled {
+		t.Error("Expected backend not to be called when cookie is expired")
+	}
+
+	// Verify return_to is stored in the new session
+	// The cookie should be set in the response
+	setCookie := w.Header().Get("Set-Cookie")
+	if setCookie == "" {
+		t.Error("Expected Set-Cookie header to store return_to value")
+	}
+}
+
 // TestFullFlow tests a complete authentication and proxying flow
 func TestFullFlow(t *testing.T) {
 	tc := setupTestConfig()

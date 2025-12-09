@@ -58,18 +58,23 @@ func authorize(s sessions.Store, h http.Handler) http.Handler {
 		logPrefix := fmt.Sprintf("app=sproxy fn=authorize method=%s path=%s\n",
 			r.Method, r.URL.Path)
 
-		session, err := s.Get(r, config.CookieName)
-		if err != nil {
-			log.Printf("%s auth=failed error=%q\n", logPrefix, err.Error())
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
 		o2c := newOauth2Config(r.Host)
 
 		// https://developers.google.com/identity/openid-connect/openid-connect#hd-param
 		hd := strings.TrimPrefix(config.EmailSuffixes[len(config.EmailSuffixes)-1], "@")
 
 		redirect := o2c.AuthCodeURL(config.StateToken, oauth2.AccessTypeOnline, oauth2.SetAuthURLParam("hd", hd))
+
+		session, err := s.Get(r, config.CookieName)
+		if err != nil {
+			// If session decode failed (e.g., expired timestamp), redirect to OAuth
+			log.Printf("%s auth=failed error=%q redirect=%s\n", logPrefix, err.Error(), redirect)
+			// Session is still usable (will be a new session) - store return_to and redirect
+			session.Values["return_to"] = r.URL.RequestURI()
+			session.Save(r, w)
+			http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
+			return
+		}
 
 		session.Values["return_to"] = r.URL.RequestURI()
 		session.Save(r, w)
