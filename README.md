@@ -4,6 +4,10 @@ Proxy designed to sit on a splunk searcher head, but behind an ELB (or other htt
 
 Assumes that splunk usernames are the same as the part of your authentication email address before the @.
 
+# API Docs
+
+See `docs/API.md` for endpoint behavior, auth flow, headers, and status/redirect semantics.
+
 # Config Vars
 
 See the Config struct for required and optional config vars and their defaults
