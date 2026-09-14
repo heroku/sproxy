@@ -1,0 +1,4 @@
+false_positive: []
+not_exploitable:
+  - id: main.go:38efcca80fd7d7b85486930b102ca8872a1f1b4cfcc6803bf03cb6bd340a7bdc
+    justification: TLS terminates at the external ELB, and instance port 5000 is private and restricted to traffic from that trusted ELB. The plaintext hop is limited to the ELB-to-instance network path; changes to these controls require reevaluating this exception.

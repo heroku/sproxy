@@ -174,6 +174,171 @@ func TestEnforceXForwardedProto(t *testing.T) {
 	}
 }
 
+func TestHSTS(t *testing.T) {
+	tests := []struct {
+		name              string
+		xForwardedProto   string
+		expectedHSTSValue string
+	}{
+		{
+			name:              "HTTPS forwarded",
+			xForwardedProto:   "https",
+			expectedHSTSValue: "max-age=31536000",
+		},
+		{
+			name:            "HTTP forwarded",
+			xForwardedProto: "http",
+		},
+		{
+			name: "forwarded protocol missing",
+		},
+		{
+			name:            "forwarded protocol uses different case",
+			xForwardedProto: "HTTPS",
+		},
+		{
+			name:            "forwarded protocol contains multiple values",
+			xForwardedProto: "https,http",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := hsts(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tt.xForwardedProto != "" {
+				req.Header.Set("X-Forwarded-Proto", tt.xForwardedProto)
+			}
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
+
+			if got := w.Header().Get("Strict-Transport-Security"); got != tt.expectedHSTSValue {
+				t.Errorf("Strict-Transport-Security = %q, want %q", got, tt.expectedHSTSValue)
+			}
+		})
+	}
+}
+
+func TestHSTSWrapsAllRoutes(t *testing.T) {
+	tc := setupTestConfig()
+	setupTestEnvironment(tc)
+
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	config.ProxyURL, _ = url.Parse(backend.URL)
+	store := sessions.NewCookieStore([]byte(tc.sessionSecret), []byte(tc.sessionEncryptionKey))
+	proxy := httputil.NewSingleHostReverseProxy(config.ProxyURL)
+	handler := newHandler(store, proxy)
+
+	tests := []struct {
+		name           string
+		path           string
+		expectedStatus int
+	}{
+		{
+			name:           "OAuth redirect",
+			path:           "/",
+			expectedStatus: http.StatusTemporaryRedirect,
+		},
+		{
+			name:           "OAuth callback error",
+			path:           tc.callbackPath + "?state=bad",
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "health check success",
+			path:           tc.healthCheckPath,
+			expectedStatus: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			req.Header.Set("X-Forwarded-Proto", "https")
+			req.Host = "test.example.com"
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("status = %d, want %d", w.Code, tt.expectedStatus)
+			}
+			if got := w.Header().Values("Strict-Transport-Security"); len(got) != 1 || got[0] != "max-age=31536000" {
+				t.Errorf("Strict-Transport-Security values = %q, want exactly %q", got, []string{"max-age=31536000"})
+			}
+		})
+	}
+
+	t.Run("HTTP routes keep their existing behavior without HSTS", func(t *testing.T) {
+		tests := []struct {
+			name           string
+			path           string
+			expectedStatus int
+		}{
+			{
+				name:           "application request redirects to HTTPS",
+				path:           "/",
+				expectedStatus: http.StatusFound,
+			},
+			{
+				name:           "OAuth callback returns validation error",
+				path:           tc.callbackPath + "?state=bad",
+				expectedStatus: http.StatusBadRequest,
+			},
+			{
+				name:           "health check remains available",
+				path:           tc.healthCheckPath,
+				expectedStatus: http.StatusOK,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+				req.Header.Set("X-Forwarded-Proto", "http")
+				req.Host = "test.example.com"
+				w := httptest.NewRecorder()
+
+				handler.ServeHTTP(w, req)
+
+				if w.Code != tt.expectedStatus {
+					t.Errorf("status = %d, want %d", w.Code, tt.expectedStatus)
+				}
+				if got := w.Header().Get("Strict-Transport-Security"); got != "" {
+					t.Errorf("Strict-Transport-Security = %q, want no header", got)
+				}
+			})
+		}
+	})
+}
+
+func TestHSTSOverridesUpstreamPolicy(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Strict-Transport-Security", "max-age=0")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	proxy := newReverseProxy(backendURL)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	w := httptest.NewRecorder()
+
+	hsts(proxy).ServeHTTP(w, req)
+
+	if got := w.Header().Values("Strict-Transport-Security"); len(got) != 1 || got[0] != "max-age=31536000" {
+		t.Errorf("Strict-Transport-Security values = %q, want exactly %q", got, []string{"max-age=31536000"})
+	}
+}
+
 // TestAuthorizeMiddleware tests the authorization middleware
 func TestAuthorizeMiddleware(t *testing.T) {
 	tc := setupTestConfig()
@@ -533,7 +698,7 @@ func TestFullFlow(t *testing.T) {
 	session.Values["email"] = "testuser@example.com"
 	session.Values["OpenIDUser"] = "testuser"
 	session.Values["valid_until"] = time.Now().UTC().Add(30 * time.Minute)
-	
+
 	// Save session to get cookies
 	w1 := httptest.NewRecorder()
 	if err := session.Save(req1, w1); err != nil {
@@ -561,4 +726,3 @@ func TestFullFlow(t *testing.T) {
 		t.Errorf("Expected X-Openid-User = 'testuser', got %q", backendReceivedUser)
 	}
 }
-
