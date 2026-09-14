@@ -17,6 +17,16 @@ Routes are configurable through environment variables. Defaults below reflect cu
 - `CALLBACK_PATH` (default: `/auth/callback/google`)
 - `HEALTH_CHECK_PATH` (default: `/en-US/static/html/credit.html`)
 
+## Response Headers
+
+Responses to requests with `X-Forwarded-Proto: https` include:
+
+```http
+Strict-Transport-Security: max-age=31536000
+```
+
+The header applies to all routes, including redirects, errors, health checks, and proxied responses. It is not added to plaintext HTTP responses.
+
 ## Service Endpoints
 
 ### `ANY {CALLBACK_PATH}` (default: `/auth/callback/google`)
