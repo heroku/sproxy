@@ -152,6 +152,24 @@ func enforceXForwardedProto(h http.Handler) http.Handler {
 	})
 }
 
+func hsts(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Forwarded-Proto") == "https" {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
+func newReverseProxy(target *url.URL) *httputil.ReverseProxy {
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.ModifyResponse = func(response *http.Response) error {
+		response.Header.Del("Strict-Transport-Security")
+		return nil
+	}
+	return proxy
+}
+
 // Set the OpenIDUser and other session values based on the data from Google
 func handleGoogleCallback(s sessions.Store) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -223,6 +241,14 @@ func handleGoogleCallback(s sessions.Store) http.Handler {
 	})
 }
 
+func newHandler(store sessions.Store, proxy http.Handler) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle(config.CallbackPath, handleGoogleCallback(store))
+	mux.Handle(config.HealthCheckPath, proxy)
+	mux.Handle("/", enforceXForwardedProto(authorize(store, proxy)))
+	return hsts(mux)
+}
+
 func main() {
 	if err := envdecode.Decode(&config); err != nil {
 		log.Fatal(err)
@@ -238,16 +264,8 @@ func main() {
 	store.Options.MaxAge = config.CookieMaxAge
 	store.Options.Secure = true
 
-	proxy := httputil.NewSingleHostReverseProxy(config.ProxyURL)
-
-	// Handle Google Callback
-	http.Handle(config.CallbackPath, handleGoogleCallback(store))
-
-	// Health Check
-	http.Handle(config.HealthCheckPath, proxy)
-
-	// Base HTTP Request handler
-	http.Handle("/", enforceXForwardedProto(authorize(store, proxy)))
+	proxy := newReverseProxy(config.ProxyURL)
+	handler := newHandler(store, proxy)
 
 	host := os.Getenv("HOST")
 
@@ -259,5 +277,5 @@ func main() {
 	listen := host + ":" + port
 	log.Println("Listening on", listen)
 
-	log.Fatal(http.ListenAndServe(listen, nil))
+	log.Fatal(http.ListenAndServe(listen, handler))
 }
