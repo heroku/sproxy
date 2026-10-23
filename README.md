@@ -70,7 +70,7 @@ All tests use safe test data:
 
 Tests run automatically on every push and pull request via GitHub Actions. The workflow:
 
-1. Sets up Go 1.24
+1. Sets up Go 1.26.10
 2. Verifies and downloads dependencies
 3. Runs the full test suite
 4. Generates coverage reports
