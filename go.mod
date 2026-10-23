@@ -1,6 +1,6 @@
 module github.com/heroku/sproxy
 
-go 1.24.0
+go 1.26.10
 
 require (
 	github.com/gorilla/sessions v0.0.0-20170802141718-b61c93cb7f67
